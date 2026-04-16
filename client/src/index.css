@@ -1,0 +1,12 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 700px at 20% 10%, rgba(25, 118, 210, 0.14), transparent 55%),
+    radial-gradient(1000px 800px at 80% 0%, rgba(156, 39, 176, 0.12), transparent 52%),
+    #0b1020;
+}
