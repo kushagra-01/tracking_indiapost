@@ -88,10 +88,10 @@ export function LoginPage() {
                   )}
                 </Button>
 
-                <Alert severity="info" variant="outlined">
+                {/* <Alert severity="info" variant="outlined">
                   SuperAdmin default: <b>superadmin</b> / <b>superadmin</b> (change via API `.env`:
                   `SUPERADMIN_USERNAME`, `SUPERADMIN_PASSWORD`).
-                </Alert>
+                </Alert> */}
               </Stack>
             </CardContent>
           </Card>
