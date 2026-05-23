@@ -95,8 +95,8 @@ function createApp() {
               "User-Agent": "Mozilla/5.0"
           },
           body: JSON.stringify({
-            username: process.env.INDIA_POST_USERNAME,
-            password: process.env.INDIA_POST_PASSWORD,
+            username: process.env.INDIAPOST_USERNAME,
+            password: process.env.INDIAPOST_PASSWORD,
           }),
         }
       );
