@@ -27,6 +27,11 @@ const mongo = require("../lib/mongo");
 function createApp() {
   const app = express();
 
+  // Vercel / reverse proxies set X-Forwarded-For — required for express-rate-limit client IPs
+  if (process.env.VERCEL || process.env.TRUST_PROXY === "1") {
+    app.set("trust proxy", 1);
+  }
+
   app.disable("x-powered-by");
   app.use(helmet());
   app.use(
