@@ -23,7 +23,7 @@ const { requireAuth, requireRole } = require("./auth");
 const fullExportJob = require("../lib/fullExportJob");
 const exportShare = require("../lib/exportShare");
 const mongo = require("../lib/mongo");
-const { logIndiaPostEnvStatus } = require("../lib/envCheck");
+const { logIndiaPostEnvStatus, indiaPostCredentialStatus } = require("../lib/envCheck");
 
 function createApp() {
   const app = express();
@@ -69,7 +69,37 @@ function createApp() {
     })
   );
 
-  app.get("/health", (req, res) => ok(res, { status: "ok" }));
+  app.get("/health", (req, res) => {
+    const creds = indiaPostCredentialStatus();
+    const onVercel = Boolean(process.env.VERCEL);
+    return ok(res, {
+      status: "ok",
+      indiapost: {
+        base_url: creds.baseUrl,
+        credentials: {
+          INDIAPOST_USERNAME: creds.usernameSet ? "set" : "missing",
+          INDIAPOST_PASSWORD: creds.passwordSet ? "set" : "missing"
+        },
+        deploy_host: onVercel ? "vercel" : "node"
+      },
+      ...(onVercel
+        ? {
+            note:
+              "India Post (app.indiapost.gov.in) often blocks Vercel/AWS IPs. If POST /api/track returns INDIAPOST_NETWORK_ERROR / ETIMEDOUT, host the API on your PC/VPS and set VITE_API_BASE_URL on Vercel to that URL."
+          }
+        : {})
+    });
+  });
+
+  app.get("/track", (req, res) =>
+    fail(
+      res,
+      405,
+      "METHOD_NOT_ALLOWED",
+      "Use POST /api/track with JSON body: { \"consignments\": [\"EE123456789IN\", ...] }",
+      { allowed: ["POST"], example: { consignments: ["EE123456789IN"] } }
+    )
+  );
 
   app.post("/auth/login", async (req, res, next) => {
     try {
@@ -386,6 +416,13 @@ function createApp() {
 
   app.use((err, req, res, next) => {
     req.log.error({ err }, "request_failed");
+
+    if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
+      return fail(res, 400, "INVALID_JSON", "Request body must be valid JSON", {
+        hint: 'POST /api/track with Content-Type: application/json and body { "consignments": ["..."] }',
+        parse_error: err.message
+      });
+    }
 
     if (err && err.name === "AppError") {
       return fail(res, err.status || 500, err.code || "APP_ERROR", err.message, err.details);

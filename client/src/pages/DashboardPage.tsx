@@ -46,6 +46,7 @@ import {
   trackConsignments,
   trackConsignmentsWithProgress
 } from "../features/tracking/api";
+import { formatApiError } from "../api/formatApiError";
 import { buildSharePageUrl, createFullExportShareLink } from "../features/tracking/shareApi";
 import { getConsignmentCategory } from "../features/tracking/consignmentCategory";
 import { furthestJourneyStage, isRtoOrReturn, journeyStagesWithState } from "../features/tracking/journeyRace";
@@ -252,10 +253,7 @@ export function DashboardPage() {
         });
         if (!cancelled) setTracking(data);
       } catch (e: unknown) {
-        if (!cancelled) {
-          const ax = e as { response?: { data?: { error?: { message?: string } } }; message?: string };
-          setErr(ax?.response?.data?.error?.message || ax?.message || "Tracking failed");
-        }
+        if (!cancelled) setErr(formatApiError(e, "Tracking failed"));
       } finally {
         if (!cancelled) {
           clearTrackJob();
@@ -337,8 +335,8 @@ export function DashboardPage() {
     try {
       const data = await trackConsignments(consignments);
       setTracking(data);
-    } catch (e: any) {
-      setErr(e?.response?.data?.error?.message || e?.message || "Refresh failed");
+    } catch (e: unknown) {
+      setErr(formatApiError(e, "Refresh failed"));
     } finally {
       setBusy(false);
     }
@@ -354,8 +352,8 @@ export function DashboardPage() {
     try {
       const { buf, contentType, filename } = await downloadReport(currentConsignments, format);
       saveAs(new Blob([buf], { type: contentType }), filename);
-    } catch (e: any) {
-      setErr(e?.response?.data?.error?.message || e?.message || "Download failed");
+    } catch (e: unknown) {
+      setErr(formatApiError(e, "Download failed"));
     } finally {
       setBusy(false);
     }
@@ -451,8 +449,8 @@ export function DashboardPage() {
     try {
       const { buf, contentType, filename } = await downloadReport([c], "pdf");
       saveAs(new Blob([buf], { type: contentType }), filename);
-    } catch (e: any) {
-      setErr(e?.response?.data?.error?.message || e?.message || "PDF download failed");
+    } catch (e: unknown) {
+      setErr(formatApiError(e, "PDF download failed"));
     } finally {
       setPdfFor(null);
     }
@@ -469,7 +467,11 @@ export function DashboardPage() {
         </Typography>
       </Box>
 
-      {err ? <Alert severity="error">{err}</Alert> : null}
+      {err ? (
+        <Alert severity="error" sx={{ whiteSpace: "pre-wrap" }}>
+          {err}
+        </Alert>
+      ) : null}
 
       {trackLoad ? (
         <Card elevation={0}>

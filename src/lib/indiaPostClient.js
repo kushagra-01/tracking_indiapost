@@ -69,6 +69,7 @@ async function login(http) {
       "Missing INDIAPOST_USERNAME / INDIAPOST_PASSWORD in environment",
       500,
       {
+        stage: "indiapost_login",
         INDIAPOST_USERNAME: username ? "set" : "missing",
         INDIAPOST_PASSWORD: password ? "set" : "missing"
       }
@@ -95,7 +96,7 @@ async function login(http) {
         "INDIAPOST_INVALID_CREDENTIALS",
         "Invalid India Post credentials (check INDIAPOST_USERNAME / INDIAPOST_PASSWORD)",
         401,
-        { status: resp.status, body: resp.data }
+        { stage: "indiapost_login", status: resp.status, body: resp.data }
       );
     }
 
@@ -103,7 +104,7 @@ async function login(http) {
       "INDIAPOST_LOGIN_FAILED",
       "India Post login failed",
       502,
-      { status: resp.status, body: resp.data }
+      { stage: "indiapost_login", status: resp.status, body: resp.data }
     );
   }
 
@@ -238,7 +239,7 @@ function normalizeBulkTrackingResponse(resp) {
       "INDIAPOST_UPSTREAM_ERROR",
       "India Post tracking request failed",
       502,
-      { status: resp.status, body: resp.data }
+      { stage: "indiapost_bulk_tracking", status: resp.status, body: resp.data }
     );
   }
 
@@ -250,7 +251,7 @@ function normalizeBulkTrackingResponse(resp) {
       "INDIAPOST_BAD_RESPONSE",
       "India Post tracking response was not in expected format",
       502,
-      { body }
+      { stage: "indiapost_bulk_tracking", body }
     );
   }
 
