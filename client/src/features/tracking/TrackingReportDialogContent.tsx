@@ -24,7 +24,6 @@ import ViewListOutlinedIcon from "@mui/icons-material/ViewListOutlined";
 import { displayLabelChipColor, getShipmentDisplayLabelFromItem } from "./consignmentCategory";
 import { emojiForTrackingEvent } from "./eventEmoji";
 import { formatEventRemarksForDisplay } from "./eventRemarks";
-import { sortTrackingEventsDesc } from "./eventSort";
 import type { TrackingItem } from "./types";
 
 function shortBookingDate(v: unknown): string {
@@ -128,13 +127,7 @@ export function TrackingReportDialogContent({ item }: Props) {
   // const stages = journeyStagesWithState(item);
   // const maxIdx = furthestJourneyStage(item);
   const statusLabel = getShipmentDisplayLabelFromItem(item);
-  const events = useMemo(
-    () =>
-      sortTrackingEventsDesc(
-        Array.isArray(item.tracking_details) ? item.tracking_details : []
-      ),
-    [item.tracking_details]
-  );
+  const events = Array.isArray(item.tracking_details) ? item.tracking_details : [];
 
   const consMo = useMemo(() => {
     const m = fmt(bd.mo_number);
@@ -323,7 +316,7 @@ export function TrackingReportDialogContent({ item }: Props) {
         accent="primary"
         icon={<TimelineOutlinedIcon sx={{ fontSize: 20 }} />}
         title={`Event timeline (${events.length})`}
-        description="Newest → oldest — date, time, office, and remarks."
+        description="Last event first → first event last (date, time, office, remarks)."
       >
         {events.length === 0 ? (
           <Paper

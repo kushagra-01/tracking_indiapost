@@ -2,7 +2,7 @@ const axios = require("axios");
 const config = require("./config");
 const { AppError, rethrowUpstream } = require("./errors");
 const { extractEventRemarks } = require("./eventRemarks");
-const { sortTrackingEventsDesc } = require("./eventSort");
+const { orderTrackingDetailsLastToFirst } = require("./eventSort");
 
 const LOGIN_PATH = "/beextcustomer/v1/access/login";
 const REFRESH_PATH = "/beextcustomer/v1/access/TokenWithRtoken";
@@ -290,7 +290,7 @@ function normalizeBulkTrackingResponse(resp) {
     const rawEvents = Array.isArray(row.tracking_details) ? row.tracking_details : [];
     const del = row.del_status || {};
 
-    const tracking_details = sortTrackingEventsDesc(
+    const tracking_details = orderTrackingDetailsLastToFirst(
       rawEvents.map((e) => ({
         date: e.date || null,
         time: e.time || null,

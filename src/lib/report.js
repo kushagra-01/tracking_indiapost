@@ -11,7 +11,6 @@ const PDFDocument = require("pdfkit");
 const XLSX = require("xlsx");
 const { loadPdfLogos } = require("./pdfLogos");
 const { formatEventRemarksForDisplay } = require("./eventRemarks");
-const { sortTrackingEventsDesc } = require("./eventSort");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS IMPORTS
@@ -516,9 +515,7 @@ async function buildPdfSingleItem(item) {
 
     const cons = safeStr(item.consignment || bd.article_number);
 
-    const evs = sortTrackingEventsDesc(
-      Array.isArray(item.tracking_details) ? item.tracking_details : []
-    );
+    const evs = Array.isArray(item.tracking_details) ? item.tracking_details : [];
 
     drawOfficialHeader(doc, logos);
 
