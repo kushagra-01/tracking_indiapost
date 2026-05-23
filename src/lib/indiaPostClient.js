@@ -1,6 +1,6 @@
 const axios = require("axios");
 const config = require("./config");
-const { AppError } = require("./errors");
+const { AppError, rethrowUpstream } = require("./errors");
 
 const LOGIN_PATH = "/beextcustomer/v1/access/login";
 const REFRESH_PATH = "/beextcustomer/v1/access/TokenWithRtoken";
@@ -76,11 +76,16 @@ async function login(http) {
     );
   }
 
-  const resp = await http.post(
-    LOGIN_PATH,
-    { username, password },
-    { headers: { "content-type": "application/json" } }
-  );
+  let resp;
+  try {
+    resp = await http.post(
+      LOGIN_PATH,
+      { username, password },
+      { headers: { "content-type": "application/json" } }
+    );
+  } catch (err) {
+    rethrowUpstream(err);
+  }
 
   if (resp.status !== 200 || !resp.data || resp.data.success !== true) {
     const upstreamMsg =
@@ -126,11 +131,16 @@ async function login(http) {
 async function refresh(http) {
   if (!tokenState.refreshToken) return false;
 
-  const resp = await http.post(
-    REFRESH_PATH,
-    {},
-    { headers: { authorization: `Bearer ${tokenState.refreshToken}` } }
-  );
+  let resp;
+  try {
+    resp = await http.post(
+      REFRESH_PATH,
+      {},
+      { headers: { authorization: `Bearer ${tokenState.refreshToken}` } }
+    );
+  } catch (err) {
+    rethrowUpstream(err);
+  }
 
   if (resp.status !== 200 || !resp.data || resp.data.success !== true) {
     return false;
@@ -154,21 +164,9 @@ async function ensureAccessToken(http) {
 }
 
 async function bulkTrackOnce(http, consignments) {
-  const resp = await http.post(
-    BULK_TRACKING_PATH,
-    { bulk: consignments },
-    {
-      headers: {
-        authorization: `Bearer ${tokenState.accessToken}`,
-        "content-type": "application/json"
-      }
-    }
-  );
-
-  if (resp.status === 401 || resp.status === 403) {
-    tokenState.accessTokenExpiresAtMs = 0;
-    await ensureAccessToken(http);
-    const retry = await http.post(
+  let resp;
+  try {
+    resp = await http.post(
       BULK_TRACKING_PATH,
       { bulk: consignments },
       {
@@ -178,6 +176,28 @@ async function bulkTrackOnce(http, consignments) {
         }
       }
     );
+  } catch (err) {
+    rethrowUpstream(err);
+  }
+
+  if (resp.status === 401 || resp.status === 403) {
+    tokenState.accessTokenExpiresAtMs = 0;
+    await ensureAccessToken(http);
+    let retry;
+    try {
+      retry = await http.post(
+        BULK_TRACKING_PATH,
+        { bulk: consignments },
+        {
+          headers: {
+            authorization: `Bearer ${tokenState.accessToken}`,
+            "content-type": "application/json"
+          }
+        }
+      );
+    } catch (err) {
+      rethrowUpstream(err);
+    }
     return normalizeBulkTrackingResponse(retry);
   }
 
@@ -185,6 +205,14 @@ async function bulkTrackOnce(http, consignments) {
 }
 
 async function bulkTrack(consignments) {
+  try {
+    return await bulkTrackInner(consignments);
+  } catch (err) {
+    rethrowUpstream(err);
+  }
+}
+
+async function bulkTrackInner(consignments) {
   const baseURL = process.env.INDIAPOST_BASE_URL || "https://app.indiapost.gov.in";
   const http = createHttp(baseURL);
 

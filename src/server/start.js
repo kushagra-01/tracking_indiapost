@@ -415,7 +415,14 @@ function createApp() {
   app.use((req, res) => fail(res, 404, "NOT_FOUND", "Route not found"));
 
   app.use((err, req, res, next) => {
-    req.log.error({ err }, "request_failed");
+    if (res.headersSent) return next(err);
+
+    try {
+      if (req.log) req.log.error({ err }, "request_failed");
+      else console.error("request_failed", err);
+    } catch (_) {
+      console.error("request_failed", err);
+    }
 
     if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
       return fail(res, 400, "INVALID_JSON", "Request body must be valid JSON", {
@@ -428,7 +435,18 @@ function createApp() {
       return fail(res, err.status || 500, err.code || "APP_ERROR", err.message, err.details);
     }
 
-    return fail(res, 500, "INTERNAL_ERROR", "Unexpected error");
+    const expose =
+      process.env.NODE_ENV !== "production" || process.env.VERCEL_ENV === "preview";
+    const message =
+      expose && err && err.message ? String(err.message) : "Unexpected error";
+
+    return fail(
+      res,
+      500,
+      "INTERNAL_ERROR",
+      message,
+      expose && err ? { name: err.name, code: err.code } : undefined
+    );
   });
 
   return app;

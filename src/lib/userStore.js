@@ -5,12 +5,23 @@ const { AppError } = require("./errors");
 const { hashPassword, verifyPassword, newId } = require("./auth");
 
 function storePath() {
-  return process.env.USER_STORE_PATH || path.join(__dirname, "..", "data", "users.json");
+  if (process.env.USER_STORE_PATH) return process.env.USER_STORE_PATH;
+  if (process.env.VERCEL) return path.join("/tmp", "indiapost-users.json");
+  return path.join(__dirname, "..", "data", "users.json");
 }
 
 async function ensureDir() {
   const p = storePath();
-  await fs.mkdir(path.dirname(p), { recursive: true });
+  try {
+    await fs.mkdir(path.dirname(p), { recursive: true });
+  } catch (err) {
+    if (err && err.code === "EEXIST") return;
+    throw new AppError(
+      "USER_STORE_ERROR",
+      `Cannot create user store directory: ${err && err.message ? err.message : err}`,
+      500
+    );
+  }
 }
 
 async function readStore() {

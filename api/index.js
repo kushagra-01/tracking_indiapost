@@ -15,11 +15,15 @@ const api = createApp();
 const app = express();
 
 app.use((req, res, next) => {
-  const url = req.url || "";
-  if (url.startsWith("/api/")) {
-    req.url = url.slice(4) || "/";
-  } else if (url === "/api") {
-    req.url = "/";
+  const raw = req.originalUrl || req.url || "";
+  const q = raw.indexOf("?");
+  const pathOnly = q === -1 ? raw : raw.slice(0, q);
+  const qs = q === -1 ? "" : raw.slice(q);
+
+  if (pathOnly.startsWith("/api/")) {
+    req.url = (pathOnly.slice(4) || "/") + qs;
+  } else if (pathOnly === "/api") {
+    req.url = "/" + qs.replace(/^\?/, "?");
   }
   next();
 });
