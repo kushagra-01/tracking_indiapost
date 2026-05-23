@@ -1,6 +1,15 @@
 /**
  * Mirrors `client/src/features/tracking/journeyRace.ts` — used for PDF layout parity with the app.
+ * Journey milestones disabled; isRtoOrReturn kept for RTO detection.
  */
+
+function trackingBlob(it) {
+  const st = String(it.status || "");
+  const evs = (Array.isArray(it.tracking_details) ? it.tracking_details : []).map((e) => String(e.event || ""));
+  return `${st}\n${evs.join("\n")}`.toLowerCase();
+}
+
+/*
 const JOURNEY_STAGES = [
   { key: "booked", label: "Booked", shortLabel: "Booked" },
   { key: "dispatched", label: "Dispatched", shortLabel: "Disp." },
@@ -8,12 +17,6 @@ const JOURNEY_STAGES = [
   { key: "out_for_delivery", label: "Out for delivery", shortLabel: "OFD" },
   { key: "delivered", label: "Delivered", shortLabel: "Delivered" }
 ];
-
-function trackingBlob(it) {
-  const st = String(it.status || "");
-  const evs = (Array.isArray(it.tracking_details) ? it.tracking_details : []).map((e) => String(e.event || ""));
-  return `${st}\n${evs.join("\n")}`.toLowerCase();
-}
 
 function furthestJourneyStage(it) {
   const t = trackingBlob(it);
@@ -52,6 +55,7 @@ function journeyStagesWithState(it) {
     current: i === maxDone
   }));
 }
+*/
 
 function isRtoOrReturn(it) {
   const t = trackingBlob(it);
@@ -59,8 +63,8 @@ function isRtoOrReturn(it) {
 }
 
 module.exports = {
-  JOURNEY_STAGES,
-  furthestJourneyStage,
-  journeyStagesWithState,
+  // JOURNEY_STAGES,
+  // furthestJourneyStage,
+  // journeyStagesWithState,
   isRtoOrReturn
 };

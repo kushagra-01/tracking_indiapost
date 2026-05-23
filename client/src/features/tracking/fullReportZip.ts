@@ -2,11 +2,16 @@ import JSZip from "jszip";
 
 import { downloadReport } from "./api";
 import type { TrackingItem } from "./types";
-import { getConsignmentCategory, type ConsignmentCategory } from "./consignmentCategory";
+import {
+  emptyFolderCounts,
+  getShipmentDisplayLabelFromItem,
+  SHIPMENT_FOLDER_LABELS,
+  type ShipmentDisplayLabel
+} from "./consignmentCategory";
 
-export type { ConsignmentCategory };
+export type { ShipmentDisplayLabel };
 
-function buildReadme(stats: { total: number; pdfCount: number; byCat: Record<ConsignmentCategory, number> }) {
+function buildReadme(stats: { total: number; pdfCount: number; byCat: Record<ShipmentDisplayLabel, number> }) {
   const lines = [
     "India Post — Full tracking export",
     "================================",
@@ -20,16 +25,13 @@ function buildReadme(stats: { total: number; pdfCount: number; byCat: Record<Con
     "  • Sheets: Consignments, All_Events, _Export_Info",
     "",
     "PDF/<Category>/<ARTICLE>.pdf",
-    "  • Delivered, RTO_Return, In_Transit, Unknown — same PDF layout as single-article download",
+    `  • ${SHIPMENT_FOLDER_LABELS.join(", ")} — same PDF layout as single-article download`,
     "",
     "Counts",
     "------",
     `Articles in Excel: ${stats.total}`,
     `PDF files generated: ${stats.pdfCount}`,
-    `  Delivered: ${stats.byCat.Delivered}`,
-    `  RTO_Return: ${stats.byCat.RTO_Return}`,
-    `  In_Transit: ${stats.byCat.In_Transit}`,
-    `  Unknown: ${stats.byCat.Unknown}`,
+    ...SHIPMENT_FOLDER_LABELS.map((label) => `  ${label}: ${stats.byCat[label]}`),
     "",
     "Note: Excel and PDFs are produced by the same server export pipeline for consistency.",
     ""
@@ -81,20 +83,12 @@ export async function buildFullReportZip(
   }
 
   const pdfRoot = zip.folder("PDF")!;
-  const catFolders: Record<ConsignmentCategory, JSZip> = {
-    Delivered: pdfRoot.folder("Delivered")!,
-    RTO_Return: pdfRoot.folder("RTO_Return")!,
-    In_Transit: pdfRoot.folder("In_Transit")!,
-    Unknown: pdfRoot.folder("Unknown")!
-  };
+  const catFolders = Object.fromEntries(
+    SHIPMENT_FOLDER_LABELS.map((label) => [label, pdfRoot.folder(label)!])
+  ) as Record<ShipmentDisplayLabel, JSZip>;
 
   const total = list.length;
-  const byCat: Record<ConsignmentCategory, number> = {
-    Delivered: 0,
-    RTO_Return: 0,
-    In_Transit: 0,
-    Unknown: 0
-  };
+  const byCat = emptyFolderCounts();
 
   onProgress({ phase: "pdf", percent: 5, detail: total ? `Generating PDFs (0/${total})…` : "No consignments to PDF — skipping" });
 
@@ -104,7 +98,7 @@ export async function buildFullReportZip(
     const c = String(it.consignment || it.booking_details?.article_number || "")
       .trim()
       .toUpperCase();
-    const cat = getConsignmentCategory(it.status);
+    const cat = getShipmentDisplayLabelFromItem(it);
     byCat[cat] += 1;
 
     const { buf } = await downloadReport([c], "pdf");

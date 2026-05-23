@@ -15,15 +15,14 @@ import {
   useTheme
 } from "@mui/material";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
-import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
+// import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import TimelineOutlinedIcon from "@mui/icons-material/TimelineOutlined";
 import ViewListOutlinedIcon from "@mui/icons-material/ViewListOutlined";
 
-import { getConsignmentCategory } from "./consignmentCategory";
+import { displayLabelChipColor, getShipmentDisplayLabelFromItem } from "./consignmentCategory";
 import { emojiForTrackingEvent } from "./eventEmoji";
-import { furthestJourneyStage, isRtoOrReturn, journeyStagesWithState, JOURNEY_STAGES } from "./journeyRace";
 import type { TrackingItem } from "./types";
 
 function shortBookingDate(v: unknown): string {
@@ -39,13 +38,6 @@ function shortBookingDate(v: unknown): string {
 function fmt(v: unknown): string {
   if (v == null || v === "") return "—";
   return String(v);
-}
-
-function categoryChipColor(cat: ReturnType<typeof getConsignmentCategory>): "success" | "warning" | "info" | "default" {
-  if (cat === "Delivered") return "success";
-  if (cat === "RTO_Return") return "warning";
-  if (cat === "In_Transit") return "info";
-  return "default";
 }
 
 type Props = { item: TrackingItem };
@@ -131,10 +123,9 @@ export function TrackingReportDialogContent({ item }: Props) {
   const theme = useTheme();
   const bd = item.booking_details || {};
   const cons = String(item.consignment || bd.article_number || "—");
-  const stages = journeyStagesWithState(item);
-  const maxIdx = furthestJourneyStage(item);
-  const rto = isRtoOrReturn(item);
-  const cat = getConsignmentCategory(item.status);
+  // const stages = journeyStagesWithState(item);
+  // const maxIdx = furthestJourneyStage(item);
+  const statusLabel = getShipmentDisplayLabelFromItem(item);
   const events = Array.isArray(item.tracking_details) ? item.tracking_details : [];
 
   const consMo = useMemo(() => {
@@ -228,8 +219,7 @@ export function TrackingReportDialogContent({ item }: Props) {
             </Box>
           </Stack>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center", justifyContent: { sm: "flex-end" }, flex: 1, gap: 1 }}>
-            <Chip size="small" label={item.status || "Unknown"} color={categoryChipColor(cat)} sx={{ fontWeight: 700 }} />
-            {rto ? <Chip size="small" label="RTO / Return" color="warning" variant="outlined" sx={{ fontWeight: 700 }} /> : null}
+            <Chip size="small" label={statusLabel} color={displayLabelChipColor(statusLabel)} sx={{ fontWeight: 700 }} />
           </Stack>
         </Stack>
       </Paper>
@@ -253,118 +243,16 @@ export function TrackingReportDialogContent({ item }: Props) {
         </Stack>
       </Paper>
 
+      {/* Journey milestones section disabled
       <SectionCard
         accent="primary"
         icon={<FlagOutlinedIcon sx={{ fontSize: 20 }} />}
         title="Journey milestones"
         description={JOURNEY_STAGES.map((s) => s.label).join(" → ")}
       >
-        <Box
-          sx={{
-            position: "relative",
-            mx: -0.5,
-            "&::after": {
-              content: '""',
-              position: "absolute",
-              right: 0,
-              top: 0,
-              bottom: 8,
-              width: 28,
-              pointerEvents: "none",
-              background: (t) => `linear-gradient(90deg, transparent, ${t.palette.background.paper})`
-            }
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "stretch",
-              flexWrap: "nowrap",
-              gap: 0,
-              overflowX: "auto",
-              pb: 1,
-              px: 0.5,
-              scrollbarWidth: "thin",
-              "&::-webkit-scrollbar": { height: 6 },
-              "&::-webkit-scrollbar-thumb": { borderRadius: 3, bgcolor: "action.selected" }
-            }}
-          >
-            {stages.map((stage, i) => (
-              <Box key={stage.key} sx={{ display: "flex", alignItems: "stretch", flex: "1 1 0", minWidth: 72 }}>
-                {i > 0 ? (
-                  <Box
-                    sx={{
-                      width: 6,
-                      flexShrink: 0,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center"
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        height: 2,
-                        width: "100%",
-                        borderRadius: 1,
-                        bgcolor: maxIdx >= i ? "success.main" : alpha(primary, 0.22),
-                        opacity: maxIdx >= i ? 1 : 0.55
-                      }}
-                    />
-                  </Box>
-                ) : null}
-                <Paper
-                  elevation={0}
-                  sx={{
-                    flex: 1,
-                    py: 0.5,
-                    px: 0.5,
-                    borderRadius: 1.5,
-                    textAlign: "center",
-                    cursor: "default",
-                    transition: "background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease",
-                    bgcolor: stage.done
-                      ? alpha(theme.palette.success.main, 0.1)
-                      : stage.current
-                        ? alpha(primary, 0.06)
-                        : "transparent",
-                    border: "1px solid",
-                    borderColor: stage.current ? "primary.main" : stage.done ? "success.main" : "divider",
-                    boxShadow: "none",
-                    "&:hover": {
-                      bgcolor: alpha(primary, 0.1),
-                      borderColor: "primary.main",
-                      boxShadow: `0 0 0 1px ${alpha(primary, 0.25)}`
-                    }
-                  }}
-                >
-                  <Typography sx={{ fontSize: "0.95rem", lineHeight: 1 }} aria-hidden>
-                    {stage.done ? "✓" : stage.emoji}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{ display: "block", fontWeight: 800, mt: 0.35, lineHeight: 1.15, fontSize: "0.62rem" }}
-                  >
-                    {stage.label}
-                  </Typography>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      opacity: 0.75,
-                      fontSize: "0.58rem",
-                      mt: 0.2,
-                      fontWeight: stage.current ? 700 : 500,
-                      lineHeight: 1.1
-                    }}
-                  >
-                    {stage.done ? "Done" : stage.current ? "Current" : "Pending"}
-                  </Typography>
-                </Paper>
-              </Box>
-            ))}
-          </Box>
-        </Box>
+        ...
       </SectionCard>
+      */}
 
       <SectionCard
         accent="secondary"

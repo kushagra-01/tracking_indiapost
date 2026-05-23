@@ -1,13 +1,13 @@
 import type { TrackingItem } from "./types";
 
-/** Five milestones shown left-to-right (India Post–style pipeline). */
-export const JOURNEY_STAGES = [
-  { key: "booked", label: "Booked", shortLabel: "Booked", emoji: "📥" },
-  { key: "dispatched", label: "Dispatched", shortLabel: "Disp.", emoji: "🚚" },
-  { key: "in_transit", label: "In transit", shortLabel: "Transit", emoji: "🛣️" },
-  { key: "out_for_delivery", label: "Out for delivery", shortLabel: "OFD", emoji: "📬" },
-  { key: "delivered", label: "Delivered", shortLabel: "Delivered", emoji: "✅" }
-] as const;
+// Journey milestones disabled — uncomment JOURNEY_STAGES + functions below to re-enable.
+// export const JOURNEY_STAGES = [
+//   { key: "booked", label: "Booked", shortLabel: "Booked", emoji: "📥" },
+//   { key: "dispatched", label: "Dispatched", shortLabel: "Disp.", emoji: "🚚" },
+//   { key: "in_transit", label: "In transit", shortLabel: "Transit", emoji: "🛣️" },
+//   { key: "out_for_delivery", label: "Out for delivery", shortLabel: "OFD", emoji: "📬" },
+//   { key: "delivered", label: "Delivered", shortLabel: "Delivered", emoji: "✅" }
+// ] as const;
 
 function trackingBlob(it: TrackingItem): string {
   const st = String(it.status || "");
@@ -15,10 +15,7 @@ function trackingBlob(it: TrackingItem): string {
   return `${st}\n${evs.join("\n")}`.toLowerCase();
 }
 
-/**
- * Index of the furthest milestone clearly reflected in status/events (0–4).
- * Used to mark earlier milestones as completed (race strip).
- */
+/*
 export function furthestJourneyStage(it: TrackingItem): number {
   const t = trackingBlob(it);
   const st = String(it.status || "").toLowerCase();
@@ -56,6 +53,7 @@ export function journeyStagesWithState(it: TrackingItem) {
     current: i === maxDone
   }));
 }
+*/
 
 export function isRtoOrReturn(it: TrackingItem): boolean {
   const t = trackingBlob(it);

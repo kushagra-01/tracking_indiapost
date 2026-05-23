@@ -17,7 +17,7 @@ module.exports = {
   UPLOAD_TEMPLATE_FILENAME: "consignments_template.xlsx",
 
   PDF_BRAND_LINE:
-    "India Post · Department of Posts — PDF exports use the same journey logic and fields as the tracking app (see server report.js).",
+    "India Post · Department of Posts — PDF exports use the same fields as the tracking app (see server report.js).",
   PDF_FOOTER_NOTE:
-    "India Post bulk tracking (large lists batched server-side) · PDF layout: India Post banner, journey milestones, booking & routing, full event trail."
+    "India Post bulk tracking (large lists batched server-side) · PDF layout: India Post banner, booking & routing, full event trail."
 };

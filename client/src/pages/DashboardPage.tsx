@@ -48,8 +48,12 @@ import {
 } from "../features/tracking/api";
 import { formatApiError } from "../api/formatApiError";
 import { buildSharePageUrl, createFullExportShareLink } from "../features/tracking/shareApi";
-import { getConsignmentCategory } from "../features/tracking/consignmentCategory";
-import { furthestJourneyStage, isRtoOrReturn, journeyStagesWithState } from "../features/tracking/journeyRace";
+import {
+  displayLabelChipColor,
+  getConsignmentCategory,
+  getShipmentDisplayLabelFromItem,
+  SHIPMENT_FOLDER_LABELS
+} from "../features/tracking/consignmentCategory";
 import { TrackingReportDialogContent } from "../features/tracking/TrackingReportDialogContent";
 
 function shortBookingDate(v: unknown): string {
@@ -62,19 +66,11 @@ function shortBookingDate(v: unknown): string {
   return s;
 }
 
-function categoryChipColor(cat: ReturnType<typeof getConsignmentCategory>): "success" | "warning" | "info" | "default" {
-  if (cat === "Delivered") return "success";
-  if (cat === "RTO_Return") return "warning";
-  if (cat === "In_Transit") return "info";
-  return "default";
-}
-
 function ShipmentRaceCell({ it }: { it: TrackingItem }) {
   const bd = it.booking_details || {};
-  const stages = journeyStagesWithState(it);
-  const maxIdx = furthestJourneyStage(it);
-  const rto = isRtoOrReturn(it);
-  const cat = getConsignmentCategory(it.status);
+  // const stages = journeyStagesWithState(it);
+  // const maxIdx = furthestJourneyStage(it);
+  const statusLabel = getShipmentDisplayLabelFromItem(it);
   const dest =
     String(bd.delivery_location || "").trim() ||
     (bd.destination_pincode != null && bd.destination_pincode !== "" ? `PIN ${bd.destination_pincode}` : "");
@@ -119,12 +115,16 @@ function ShipmentRaceCell({ it }: { it: TrackingItem }) {
           >
             {it.consignment || bd.article_number || "—"}
           </Typography>
-          <Chip size="small" label={it.status || "Unknown"} color={categoryChipColor(cat)} variant="outlined" sx={{ height: 20, fontSize: "0.65rem" }} />
-          {rto ? (
-            <Chip size="small" label="↩ RTO" color="warning" sx={{ height: 20, fontSize: "0.6rem" }} />
-          ) : null}
+          <Chip
+            size="small"
+            label={statusLabel}
+            color={displayLabelChipColor(statusLabel)}
+            variant="outlined"
+            sx={{ height: 20, fontSize: "0.65rem" }}
+          />
         </Box>
 
+        {/* Journey milestones strip disabled
         <Box
           component="div"
           role="group"
@@ -184,6 +184,7 @@ function ShipmentRaceCell({ it }: { it: TrackingItem }) {
             </Box>
           ))}
         </Box>
+        */}
       </Box>
 
       {bits.length ? (
@@ -616,7 +617,10 @@ export function DashboardPage() {
                 <Typography variant="body2" sx={{ opacity: 0.75 }}>
                   Showing <b>{filtered.length}</b> row(s). Quick exports respect the current filter.{" "}
                   <b>Full report (ZIP)</b> uses the <b>same server exports</b> as XLSX / single PDF: master Excel + PDFs in
-                  <code> Delivered</code>, <code>RTO_Return</code>, <code>In_Transit</code>, <code>Unknown</code> — runs as
+                  {SHIPMENT_FOLDER_LABELS.map((l) => (
+                    <code key={l}> {l}</code>
+                  ))}{" "}
+                  — runs as
                   a <b>queued server job</b> (poll + download when ready).
                 </Typography>
                 {hasActiveExport ? (

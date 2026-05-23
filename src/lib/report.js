@@ -7,7 +7,7 @@
  * "Consignment/MO Tracking Report" format exactly.
  *
  * External deps: pdfkit, xlsx  (already in your package.json)
- * Internal deps: consignmentCategory, reportFormats, journeyRace  (unchanged)
+ * Internal deps: consignmentCategory, reportFormats  (journeyRace milestones disabled)
  *
  * Exports (same surface as before):
  *   createDownloadMeta(format, opts)
@@ -22,20 +22,25 @@ const XLSX = require("xlsx");
 // ── bring in your existing helpers (paths unchanged) ─────────────────────────
 // If these modules don't exist in the sandbox, we inline stubs so the file
 // can be tested standalone; in production they resolve normally.
-let getConsignmentCategory, journeyStagesWithState, isRtoOrReturn;
+let getConsignmentCategory, getShipmentDisplayLabelFromItem;
+// let journeyStagesWithState, isRtoOrReturn;
 let SHEET_CONSIGNMENTS, SHEET_ALL_EVENTS, SHEET_EXPORT_INFO;
 let PDF_FOOTER_NOTE, UPLOAD_COLUMN_CONSIGNMENT, EXAMPLE_CONSIGNMENT;
 
 try {
-  ({ getConsignmentCategory } = require("./consignmentCategory"));
-} catch { getConsignmentCategory = () => "Unknown"; }
-
-try {
-  ({ journeyStagesWithState, isRtoOrReturn } = require("./journeyRace"));
+  ({ getConsignmentCategory, getShipmentDisplayLabelFromItem } = require("./consignmentCategory"));
 } catch {
-  journeyStagesWithState = () => [];
-  isRtoOrReturn = () => false;
+  getConsignmentCategory = () => "Unknown";
+  getShipmentDisplayLabelFromItem = (it) => (it && it.status) || "Transit";
 }
+
+// Journey milestones disabled — journeyRace strip not loaded
+// try {
+//   ({ journeyStagesWithState, isRtoOrReturn } = require("./journeyRace"));
+// } catch {
+//   journeyStagesWithState = () => [];
+//   isRtoOrReturn = () => false;
+// }
 
 try {
   ({
@@ -78,15 +83,15 @@ const C = {
   tableRowAlt:   "#fafafa",
   tableText:     "#1a1a1a",
 
-  // Journey strip (kept from your existing code)
-  greenBg:       "#dcfce7",
-  greenBorder:   "#16a34a",
-  greenText:     "#14532d",
-  blueRing:      "#2563eb",
-  stripDefault:  "#f1f5f9",
-  stripBorder:   "#cbd5e1",
-  navy:          "#1e3a8a",
-  muted:         "#64748b",
+  // Journey strip colours (disabled with drawJourneyStrip)
+  // greenBg:       "#dcfce7",
+  // greenBorder:   "#16a34a",
+  // greenText:     "#14532d",
+  // blueRing:      "#2563eb",
+  // stripDefault:  "#f1f5f9",
+  // stripBorder:   "#cbd5e1",
+  // navy:          "#1e3a8a",
+  // muted:         "#64748b",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,7 +172,7 @@ function sanitizeFilenamePart(s) {
 function buildSummaryRowsFromItems(items) {
   return items.map((it, idx) => {
     const bd  = it.booking_details || {};
-    const cat = getConsignmentCategory(it.status);
+    const cat = getShipmentDisplayLabelFromItem(it);
     const le  = it.last_event || {};
     const cons = safeStr(it.consignment || bd.article_number);
     return {
@@ -197,7 +202,7 @@ function buildSummaryRowsFromItems(items) {
 function buildEventRowsFromItems(items) {
   const out = [];
   for (const it of items) {
-    const cat  = getConsignmentCategory(it.status);
+    const cat  = getShipmentDisplayLabelFromItem(it);
     const cons = safeStr(it.consignment || (it.booking_details && it.booking_details.article_number));
     (Array.isArray(it.tracking_details) ? it.tracking_details : []).forEach((e, i) => {
       out.push({
@@ -561,7 +566,8 @@ function drawEventRow(doc, ev, isAlt) {
   doc.y = y + rowH;
 }
 
-// ── Journey strip (kept exactly from your original codebase) ──────────────────
+// ── Journey strip (disabled) ──────────────────────────────────────────────────
+/*
 function drawJourneyStrip(doc, item) {
   const stages = journeyStagesWithState(item);
   if (!stages || !stages.length) return;
@@ -597,6 +603,7 @@ function drawJourneyStrip(doc, item) {
 
   doc.y = y0 + boxH + 10;
 }
+*/
 
 // ── Footer ────────────────────────────────────────────────────────────────────
 function drawFooter(doc, url) {
@@ -653,8 +660,7 @@ function buildPdfSingleItem(item) {
   drawConsignmentNumber(doc, cons);
   drawInfoGrid(doc, bd, cons);
 
-  // journey strip (optional — only if journeyStagesWithState returns data)
-  try { drawJourneyStrip(doc, item); } catch (_) { /* ignore if module absent */ }
+  // try { drawJourneyStrip(doc, item); } catch (_) {}
 
   // ── Event table ────────────────────────────────────────────────────────────
   gap(doc, 6);
@@ -723,7 +729,7 @@ function buildPdfMulti(nt) {
     drawConsignmentNumber(doc, cons);
     drawInfoGrid(doc, bd, cons);
 
-    try { drawJourneyStrip(doc, item); } catch (_) {}
+    // try { drawJourneyStrip(doc, item); } catch (_) {}
 
     // ── Event table ────────────────────────────────────────────────────────────
     gap(doc, 4);

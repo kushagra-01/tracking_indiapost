@@ -14,7 +14,7 @@ const archiver = require("archiver");
 const config = require("./config");
 const { bulkTrack } = require("./indiaPostClient");
 const { buildReportBuffer } = require("./report");
-const { getConsignmentCategory } = require("./consignmentCategory");
+const { getShipmentDisplayLabelFromItem, emptyFolderCounts, SHIPMENT_FOLDER_LABELS } = require("./consignmentCategory");
 
 /** @type {Map<string, object>} */
 const jobs = new Map();
@@ -41,16 +41,13 @@ function buildReadme(stats) {
     "  • Sheets: Consignments, All_Events, _Export_Info",
     "",
     "PDF/<Category>/<ARTICLE>.pdf",
-    "  • Delivered, RTO_Return, In_Transit, Unknown — same PDF layout as single-article download",
+    `  • ${SHIPMENT_FOLDER_LABELS.join(", ")} — same PDF layout as single-article download`,
     "",
     "Counts",
     "------",
     `Articles in Excel: ${stats.total}`,
     `PDF files generated: ${stats.pdfCount}`,
-    `  Delivered: ${stats.byCat.Delivered}`,
-    `  RTO_Return: ${stats.byCat.RTO_Return}`,
-    `  In_Transit: ${stats.byCat.In_Transit}`,
-    `  Unknown: ${stats.byCat.Unknown}`,
+    ...SHIPMENT_FOLDER_LABELS.map((label) => `  ${label}: ${stats.byCat[label] ?? 0}`),
     "",
     "Note: Built server-side in a queued job (throttled) for stable load.",
     ""
@@ -151,12 +148,7 @@ async function runOneJob(job) {
       archive.append(Buffer.from("No consignments to export.\r\n"), { name: "Excel/README.txt" });
     }
 
-    const byCat = {
-      Delivered: 0,
-      RTO_Return: 0,
-      In_Transit: 0,
-      Unknown: 0
-    };
+    const byCat = emptyFolderCounts();
     const total = items.length;
 
     touch(job, {
@@ -174,7 +166,7 @@ async function runOneJob(job) {
       const c = String(it.consignment || (it.booking_details && it.booking_details.article_number) || "")
         .trim()
         .toUpperCase();
-      const cat = getConsignmentCategory(it.status);
+      const cat = getShipmentDisplayLabelFromItem(it);
       byCat[cat] += 1;
 
       touch(job, {

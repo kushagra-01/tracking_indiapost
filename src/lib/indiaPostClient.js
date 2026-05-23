@@ -53,10 +53,10 @@ function dedupeConsignmentsPreserveOrder(consignments) {
 }
 
 async function login(http) {
-  if (!envStatusLogged) {
-    logIndiaPostEnvStatus("before-indiapost-login");
-    envStatusLogged = true;
-  }
+  // if (!envStatusLogged) {
+  //   logIndiaPostEnvStatus("before-indiapost-login");
+  //   envStatusLogged = true;
+  // }
 
   const usernameRaw = process.env.INDIAPOST_USERNAME;
   const passwordRaw = process.env.INDIAPOST_PASSWORD;
