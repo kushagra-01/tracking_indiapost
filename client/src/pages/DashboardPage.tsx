@@ -25,8 +25,10 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import DownloadIcon from "@mui/icons-material/Download";
 import FolderZipIcon from "@mui/icons-material/FolderZip";
+import IosShareIcon from "@mui/icons-material/IosShare";
 import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
@@ -41,8 +43,10 @@ import {
   downloadReport,
   listFullExportJobs,
   type FullExportJobStatus,
-  trackConsignments
+  trackConsignments,
+  trackConsignmentsWithProgress
 } from "../features/tracking/api";
+import { buildSharePageUrl, createFullExportShareLink } from "../features/tracking/shareApi";
 import { getConsignmentCategory } from "../features/tracking/consignmentCategory";
 import { furthestJourneyStage, isRtoOrReturn, journeyStagesWithState } from "../features/tracking/journeyRace";
 import { TrackingReportDialogContent } from "../features/tracking/TrackingReportDialogContent";
@@ -197,15 +201,23 @@ function ShipmentRaceCell({ it }: { it: TrackingItem }) {
 
 export function DashboardPage() {
   const nav = useNavigate();
-  const { consignments, tracking, setTracking } = useTracking();
+  const { consignments, tracking, trackJob, setTracking, clearTrackJob } = useTracking();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "delivered" | "rto" | "intransit" | "unknown">("all");
   const [busy, setBusy] = useState(false);
+  const [trackLoad, setTrackLoad] = useState<{ showPercent: boolean; percent: number; detail: string } | null>(
+    null
+  );
   const [err, setErr] = useState<string | null>(null);
   const [openItem, setOpenItem] = useState<TrackingItem | null>(null);
   const [pdfFor, setPdfFor] = useState<string | null>(null);
   const [fullZipOpen, setFullZipOpen] = useState(false);
   const [exportJobs, setExportJobs] = useState<FullExportJobStatus[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareSnapshotLabel, setShareSnapshotLabel] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const items = tracking?.items ?? [];
 
@@ -227,6 +239,34 @@ export function DashboardPage() {
     () => exportJobs.some((j) => j.status === "queued" || j.status === "running"),
     [exportJobs]
   );
+
+  useEffect(() => {
+    if (!trackJob?.length) return;
+    let cancelled = false;
+    setErr(null);
+    setTrackLoad({ showPercent: false, percent: 0, detail: "Contacting India Post…" });
+    void (async () => {
+      try {
+        const data = await trackConsignmentsWithProgress(trackJob, (percent, showPercent, detail) => {
+          if (!cancelled) setTrackLoad({ showPercent, percent, detail });
+        });
+        if (!cancelled) setTracking(data);
+      } catch (e: unknown) {
+        if (!cancelled) {
+          const ax = e as { response?: { data?: { error?: { message?: string } } }; message?: string };
+          setErr(ax?.response?.data?.error?.message || ax?.message || "Tracking failed");
+        }
+      } finally {
+        if (!cancelled) {
+          clearTrackJob();
+          setTrackLoad(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [trackJob, setTracking, clearTrackJob]);
 
   useEffect(() => {
     if (!tracking) return;
@@ -353,6 +393,40 @@ export function DashboardPage() {
     }
   }
 
+  async function createShareLink() {
+    if (!zipConsignments.length) return;
+    setErr(null);
+    setShareBusy(true);
+    setShareCopied(false);
+    try {
+      const meta = await createFullExportShareLink(zipConsignments);
+      setShareUrl(buildSharePageUrl(meta.token));
+      setShareSnapshotLabel(meta.snapshotDateLabel);
+      setShareOpen(true);
+      const { items: rows } = await listFullExportJobs();
+      setExportJobs(rows);
+    } catch (e: unknown) {
+      setErr(
+        e && typeof e === "object" && "message" in e
+          ? String((e as { message: string }).message)
+          : "Could not create share link"
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function copyShareLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2500);
+    } catch {
+      setErr("Could not copy link — select and copy manually.");
+    }
+  }
+
   async function cancelExportJob(job: FullExportJobStatus) {
     if (job.status !== "queued" && job.status !== "running") return;
     setErr(null);
@@ -397,7 +471,38 @@ export function DashboardPage() {
 
       {err ? <Alert severity="error">{err}</Alert> : null}
 
-      {!tracking ? (
+      {trackLoad ? (
+        <Card elevation={0}>
+          <CardContent>
+            <Stack spacing={1.5}>
+              <Typography sx={{ fontWeight: 800 }}>Fetching tracking</Typography>
+              {trackLoad.showPercent ? (
+                <>
+                  <LinearProgress
+                    variant="determinate"
+                    value={trackLoad.percent}
+                    sx={{ height: 10, borderRadius: 2 }}
+                  />
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {trackLoad.percent}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.75 }}>
+                      {trackLoad.detail}
+                    </Typography>
+                  </Stack>
+                </>
+              ) : (
+                <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                  {trackLoad.detail}
+                </Typography>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {!tracking && !trackLoad ? (
         <Card elevation={0}>
           <CardContent>
             <Stack spacing={1}>
@@ -413,7 +518,7 @@ export function DashboardPage() {
             </Stack>
           </CardContent>
         </Card>
-      ) : (
+      ) : tracking ? (
         <>
           <Card elevation={0}>
             <CardContent>
@@ -459,6 +564,14 @@ export function DashboardPage() {
                     }}
                   >
                     Full report (ZIP)
+                  </Button>
+                  <Button
+                    startIcon={<IosShareIcon />}
+                    variant="outlined"
+                    disabled={busy || shareBusy || !zipConsignments.length}
+                    onClick={() => void createShareLink()}
+                  >
+                    {shareBusy ? "Creating link…" : "Share download link"}
                   </Button>
                 </Stack>
 
@@ -555,6 +668,50 @@ export function DashboardPage() {
               </TableContainer>
             </CardContent>
           </Card>
+
+          <Dialog open={shareOpen} onClose={() => setShareOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <IosShareIcon color="primary" /> Share full ZIP download
+            </DialogTitle>
+            <DialogContent>
+              <Stack spacing={2} sx={{ mt: 0.5 }}>
+                <Typography variant="body2" sx={{ opacity: 0.85 }}>
+                  Anyone with this link can open it <b>without logging in</b> — no username or password. The page
+                  shows build <b>%</b>, then auto-downloads the same full report ZIP ({zipConsignments.length}{" "}
+                  article{zipConsignments.length === 1 ? "" : "s"}).
+                </Typography>
+                {shareSnapshotLabel ? (
+                  <Alert severity="warning" variant="outlined">
+                    This link is generated on <b>{shareSnapshotLabel}</b>. Recipients will see tracking data{" "}
+                    <b>for this date only</b> (snapshot at export time, not live updates later).
+                  </Alert>
+                ) : null}
+                <Alert severity="info" variant="outlined">
+                  Export starts immediately on the server. Recipients see live build progress, then automatic download
+                  with transfer <b>%</b>. Links expire after the server retention window (~30 min).
+                </Alert>
+                <TextField
+                  label="Share URL"
+                  value={shareUrl ?? ""}
+                  fullWidth
+                  size="small"
+                  slotProps={{ input: { readOnly: true } }}
+                  onFocus={(e) => e.target.select()}
+                />
+              </Stack>
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setShareOpen(false)}>Close</Button>
+              <Button
+                variant="contained"
+                startIcon={<ContentCopyIcon />}
+                disabled={!shareUrl}
+                onClick={() => void copyShareLink()}
+              >
+                {shareCopied ? "Copied!" : "Copy link"}
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           <Dialog open={fullZipOpen} onClose={() => setFullZipOpen(false)} maxWidth="md" fullWidth>
             <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -674,8 +831,16 @@ export function DashboardPage() {
                 ) : null}
               </Stack>
             </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2 }}>
+            <DialogActions sx={{ px: 3, pb: 2, flexWrap: "wrap", gap: 1 }}>
               <Button onClick={() => setFullZipOpen(false)}>Close</Button>
+              <Button
+                variant="outlined"
+                startIcon={<IosShareIcon />}
+                disabled={shareBusy || !zipConsignments.length}
+                onClick={() => void createShareLink()}
+              >
+                Share link
+              </Button>
               <Button
                 variant="contained"
                 color="secondary"
@@ -767,7 +932,7 @@ export function DashboardPage() {
             </DialogActions>
           </Dialog>
         </>
-      )}
+      ) : null}
     </Stack>
   );
 }

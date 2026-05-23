@@ -5,9 +5,64 @@ import { UPLOAD_TEMPLATE_FILENAME } from "./reportFormats";
 /** Must exceed worst-case server time for large batches (see server `SERVER_REQUEST_TIMEOUT_MS`). */
 const TRACK_REQUEST_TIMEOUT_MS = 900_000;
 
+/** Matches server `BULK_MAX_PER_REQUEST` in `indiaPostClient.js`. */
+const BULK_MAX_PER_REQUEST = 50;
+
 export async function trackConsignments(consignments: string[]): Promise<TrackResponse> {
   const resp = await http.post("/track", { consignments }, { timeout: TRACK_REQUEST_TIMEOUT_MS });
   return resp.data.data as TrackResponse;
+}
+
+/**
+ * Tracks in chunks so progress can update after each successful upstream batch.
+ * `onProgress` is called with `showPercent: true` only after the first chunk succeeds.
+ */
+export async function trackConsignmentsWithProgress(
+  consignments: string[],
+  onProgress: (percent: number, showPercent: boolean, detail: string) => void
+): Promise<TrackResponse> {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of consignments) {
+    const c = raw.trim().toUpperCase();
+    if (!c || seen.has(c)) continue;
+    seen.add(c);
+    unique.push(c);
+  }
+  if (!unique.length) {
+    return { upstream_message: "", count: 0, items: [] };
+  }
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += BULK_MAX_PER_REQUEST) {
+    chunks.push(unique.slice(i, i + BULK_MAX_PER_REQUEST));
+  }
+
+  const mergedItems: TrackResponse["items"] = [];
+  const messages: string[] = [];
+  let showPercent = false;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const part = await trackConsignments(chunks[i]);
+    if (!showPercent) {
+      showPercent = true;
+      onProgress(0, true, `Received batch 1 of ${chunks.length}…`);
+    }
+    mergedItems.push(...part.items);
+    if (part.upstream_message) messages.push(part.upstream_message);
+    const pct = Math.round(((i + 1) / chunks.length) * 100);
+    onProgress(
+      pct,
+      true,
+      chunks.length > 1 ? `Batch ${i + 1} of ${chunks.length} complete` : "Processing results…"
+    );
+  }
+
+  return {
+    upstream_message: messages.join(" ").trim(),
+    count: mergedItems.length,
+    items: mergedItems
+  };
 }
 
 /** Upload template — same bytes as server `buildUploadTemplateBuffer` (single format app-wide). */

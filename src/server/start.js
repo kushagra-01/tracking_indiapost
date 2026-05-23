@@ -21,6 +21,8 @@ const { createDownloadMeta, buildReportBuffer, buildUploadTemplateBuffer } = req
 const { UPLOAD_TEMPLATE_FILENAME } = require("../lib/reportFormats");
 const { requireAuth, requireRole } = require("./auth");
 const fullExportJob = require("../lib/fullExportJob");
+const exportShare = require("../lib/exportShare");
+const mongo = require("../lib/mongo");
 
 function createApp() {
   const app = express();
@@ -54,7 +56,9 @@ function createApp() {
         if (req.method !== "GET") return false;
         const p = req.path || "";
         if (p === "/track/export-full-report") return true;
-        return /^\/track\/export-full-report\/[^/]+$/.test(p);
+        if (/^\/track\/export-full-report\/[^/]+$/.test(p)) return true;
+        if (/^\/share\/full-export\/[^/]+$/.test(p)) return true;
+        return false;
       }
     })
   );
@@ -257,30 +261,7 @@ function createApp() {
           { status: job.status }
         );
       }
-      const stamp = new Date(job.createdAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const filename = `IndiaPost_Full_Report_${stamp}.zip`;
-
-      res.setHeader("Content-Type", "application/zip");
-      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-
-      const stream = fs.createReadStream(job.filePath);
-      let cleaned = false;
-      const cleanupFile = () => {
-        if (cleaned) return;
-        cleaned = true;
-        const p = job.filePath;
-        job.filePath = null;
-        if (p) fs.unlink(p, () => {});
-      };
-      stream.on("error", (err) => {
-        cleanupFile();
-        if (!res.headersSent) next(err);
-      });
-      res.once("finish", cleanupFile);
-      req.once("close", () => {
-        if (!res.writableEnded) cleanupFile();
-      });
-      stream.pipe(res);
+      streamFullExportZip(job, req, res, next);
     } catch (err) {
       return next(err);
     }
@@ -310,6 +291,91 @@ function createApp() {
     }
   });
 
+  function streamFullExportZip(job, req, res, next) {
+    if (job.status !== "done" || !job.filePath) {
+      throw new AppError(
+        "NOT_READY",
+        "Export is still processing, failed, or the file was already downloaded",
+        409,
+        { status: job.status }
+      );
+    }
+    const stamp = new Date(job.createdAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `IndiaPost_Full_Report_${stamp}.zip`;
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    const stream = fs.createReadStream(job.filePath);
+    let cleaned = false;
+    const cleanupFile = () => {
+      if (cleaned) return;
+      cleaned = true;
+      const p = job.filePath;
+      job.filePath = null;
+      if (p) fs.unlink(p, () => {});
+    };
+    stream.on("error", (err) => {
+      cleanupFile();
+      if (!res.headersSent) next(err);
+    });
+    res.once("finish", cleanupFile);
+    req.once("close", () => {
+      if (!res.writableEnded) cleanupFile();
+    });
+    stream.pipe(res);
+  }
+
+  /** Public full ZIP share — no auth; same export queue as dashboard */
+  app.post("/share/full-export", async (req, res, next) => {
+    try {
+      const parsed = trackRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message
+          }))
+        });
+      }
+      const consignments = parsed.data.consignments.map((c) => c.toUpperCase());
+      const share = await exportShare.createShare(consignments);
+      return ok(res, share);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.get("/share/full-export/:token", async (req, res, next) => {
+    try {
+      const resolved = await exportShare.resolveShareJob(req.params.token);
+      if (!resolved) {
+        throw new AppError("NOT_FOUND", "Share link not found or expired", 404);
+      }
+      return ok(res, {
+        consignmentCount: resolved.record.consignmentCount,
+        generatedAt: resolved.record.generatedAt,
+        snapshotDate: resolved.record.snapshotDate,
+        snapshotDateLabel: resolved.record.snapshotDateLabel,
+        job: fullExportJob.sanitizeJob(resolved.job)
+      });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.get("/share/full-export/:token/download", async (req, res, next) => {
+    try {
+      const resolved = await exportShare.resolveShareJob(req.params.token);
+      if (!resolved) {
+        throw new AppError("NOT_FOUND", "Share link not found or expired", 404);
+      }
+      streamFullExportZip(resolved.job, req, res, next);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
   app.use((req, res) => fail(res, 404, "NOT_FOUND", "Route not found"));
 
   app.use((err, req, res, next) => {
@@ -325,7 +391,19 @@ function createApp() {
   return app;
 }
 
-function start() {
+async function start() {
+  try {
+    await mongo.connect();
+    // eslint-disable-next-line no-console
+    console.log("MongoDB connected");
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "MongoDB connect failed — share links will not work until MONGODB_URI is set:",
+      err && err.message ? err.message : err
+    );
+  }
+
   const app = createApp();
   const port = Number(process.env.PORT || 3000);
 

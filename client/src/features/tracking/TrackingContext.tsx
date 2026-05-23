@@ -4,8 +4,12 @@ import type { TrackResponse } from "./types";
 type State = {
   consignments: string[];
   tracking: TrackResponse | null;
+  /** Set from Upload when user clicks Track now; dashboard runs fetch + progress UI. */
+  trackJob: string[] | null;
   setConsignments: (c: string[]) => void;
   setTracking: (t: TrackResponse | null) => void;
+  startTrackJob: (c: string[]) => void;
+  clearTrackJob: () => void;
   clear: () => void;
 };
 
@@ -18,6 +22,7 @@ const LEGACY_LS_TRACK = "ip_tracking";
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const [consignments, setConsignmentsState] = useState<string[]>([]);
   const [tracking, setTrackingState] = useState<TrackResponse | null>(null);
+  const [trackJob, setTrackJob] = useState<string[] | null>(null);
 
   useEffect(() => {
     try {
@@ -32,18 +37,28 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
     () => ({
       consignments,
       tracking,
+      trackJob,
       setConsignments: (c) => {
         setConsignmentsState(c);
       },
       setTracking: (t) => {
         setTrackingState(t);
       },
+      startTrackJob: (c) => {
+        setConsignmentsState(c);
+        setTrackingState(null);
+        setTrackJob(c);
+      },
+      clearTrackJob: () => {
+        setTrackJob(null);
+      },
       clear: () => {
         setConsignmentsState([]);
         setTrackingState(null);
+        setTrackJob(null);
       }
     }),
-    [consignments, tracking]
+    [consignments, tracking, trackJob]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

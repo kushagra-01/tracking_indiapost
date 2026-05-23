@@ -6,11 +6,13 @@ import { AppShell } from "./AppShell";
 import { DashboardPage } from "../pages/DashboardPage";
 import { UploadPage } from "../pages/UploadPage";
 import { UsersPage } from "../pages/UsersPage";
+import { ShareDownloadPage } from "../pages/ShareDownloadPage";
 
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/share/:token" element={<ShareDownloadPage />} />
 
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>

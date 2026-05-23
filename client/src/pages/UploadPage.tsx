@@ -19,13 +19,13 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { useNavigate } from "react-router-dom";
 
 import { splitPastedConsignments } from "../features/tracking/consignments";
-import { fetchUploadTemplate, trackConsignments, uploadTemplateDownloadFilename } from "../features/tracking/api";
+import { fetchUploadTemplate, uploadTemplateDownloadFilename } from "../features/tracking/api";
 import { SHEET_CONSIGNMENTS, UPLOAD_COLUMN_CONSIGNMENT } from "../features/tracking/reportFormats";
 import { useTracking } from "../features/tracking/TrackingContext";
 
 export function UploadPage() {
   const nav = useNavigate();
-  const { setConsignments, setTracking } = useTracking();
+  const { startTrackJob } = useTracking();
   const [paste, setPaste] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileCons, setFileCons] = useState<string[]>([]);
@@ -80,23 +80,16 @@ export function UploadPage() {
     }
   }
 
-  async function runTracking() {
+  function runTracking() {
     setError(null);
     if (!allValid.length) {
       setError("Add at least 1 valid consignment.");
       return;
     }
+    if (busy) return;
     setBusy(true);
-    try {
-      setConsignments(allValid);
-      const data = await trackConsignments(allValid);
-      setTracking(data);
-      nav("/", { replace: true });
-    } catch (e: any) {
-      setError(e?.response?.data?.error?.message || e?.message || "Tracking failed");
-    } finally {
-      setBusy(false);
-    }
+    startTrackJob(allValid);
+    nav("/", { replace: true });
   }
 
   return (
@@ -201,7 +194,7 @@ export function UploadPage() {
                 disabled={busy}
                 onClick={() => void runTracking()}
               >
-                Track now
+                {busy ? "Starting…" : "Track now"}
               </Button>
             </Stack>
           </Stack>

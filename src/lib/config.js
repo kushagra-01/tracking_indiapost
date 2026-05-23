@@ -24,6 +24,8 @@ function clamp(n, lo, hi) {
 const maxConsignments = intEnv("MAX_CONSIGNMENTS", 100_000);
 
 module.exports = {
+  mongoUri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017",
+  mongoDbName: process.env.MONGODB_DB_NAME || "indiapost_tracking",
   /** Express `express.json` limit (large paste / Excel-derived lists). */
   jsonBodyLimit: process.env.JSON_BODY_LIMIT || "10mb",
 
@@ -52,5 +54,8 @@ module.exports = {
   exportFullJobTtlMs: intEnv("EXPORT_FULL_JOB_TTL_MS", 1_800_000),
 
   /** Max export jobs kept in memory (oldest pruned first). */
-  exportFullMaxJobs: clamp(intEnv("EXPORT_FULL_MAX_JOBS", 40), 5, 500)
+  exportFullMaxJobs: clamp(intEnv("EXPORT_FULL_MAX_JOBS", 40), 5, 500),
+
+  /** Public share links for full ZIP exports (ms). */
+  exportShareTtlMs: intEnv("EXPORT_SHARE_TTL_MS", 1_800_000)
 };
