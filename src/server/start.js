@@ -84,33 +84,40 @@ function createApp() {
 
   app.get("/health", async (req, res) => {
     try {
+      console.log("Calling India Post API...");
+  
       const response = await fetch(
         "https://app.indiapost.gov.in/beextcustomer/v1/access/login",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+              "User-Agent": "Mozilla/5.0"
           },
           body: JSON.stringify({
-            username: "3000064964",
-            password: "Viv@k32!",
+            username: process.env.INDIA_POST_USERNAME,
+            password: process.env.INDIA_POST_PASSWORD,
           }),
-        },
+        }
       );
-
-      const data = await response.json();
-
-      res.status(200).json({
-        success: true,
-        data: data,
+  
+      console.log("Status:", response.status);
+  
+      const text = await response.text();
+  
+      console.log("Response:", text);
+  
+      res.send({
+        status: response.status,
+        data: text,
       });
-    } catch (error) {
-      console.error("Health API Error:", error);
-
+  
+    } catch (err) {
+      console.error("ERROR:", err);
+  
       res.status(500).json({
-        success: false,
-        message: "Failed to login",
-        error: error.message,
+        error: err.message,
+        stack: err.stack,
       });
     }
   });
