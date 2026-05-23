@@ -23,6 +23,7 @@ const { requireAuth, requireRole } = require("./auth");
 const fullExportJob = require("../lib/fullExportJob");
 const exportShare = require("../lib/exportShare");
 const mongo = require("../lib/mongo");
+const { logIndiaPostEnvStatus } = require("../lib/envCheck");
 
 function createApp() {
   const app = express();
@@ -397,6 +398,8 @@ function createApp() {
 }
 
 async function start() {
+  logIndiaPostEnvStatus("server-start");
+
   try {
     await mongo.connect();
     // eslint-disable-next-line no-console

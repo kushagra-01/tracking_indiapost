@@ -53,6 +53,11 @@ function dedupeConsignmentsPreserveOrder(consignments) {
 }
 
 async function login(http) {
+  if (!envStatusLogged) {
+    logIndiaPostEnvStatus("before-indiapost-login");
+    envStatusLogged = true;
+  }
+
   const usernameRaw = process.env.INDIAPOST_USERNAME;
   const passwordRaw = process.env.INDIAPOST_PASSWORD;
   const username = typeof usernameRaw === "string" ? usernameRaw.trim() : usernameRaw;
@@ -62,7 +67,11 @@ async function login(http) {
     throw new AppError(
       "CONFIG_MISSING",
       "Missing INDIAPOST_USERNAME / INDIAPOST_PASSWORD in environment",
-      500
+      500,
+      {
+        INDIAPOST_USERNAME: username ? "set" : "missing",
+        INDIAPOST_PASSWORD: password ? "set" : "missing"
+      }
     );
   }
 

@@ -7,6 +7,9 @@ require("dotenv").config();
 const express = require("express");
 const { createApp } = require("../src/server/start");
 const mongo = require("../src/lib/mongo");
+const { logIndiaPostEnvStatus } = require("../src/lib/envCheck");
+
+logIndiaPostEnvStatus("vercel-cold-start");
 
 const api = createApp();
 const app = express();

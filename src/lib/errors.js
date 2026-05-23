@@ -1,3 +1,5 @@
+const { indiaPostCredentialStatus } = require("./envCheck");
+
 class AppError extends Error {
   /**
    * @param {string} code
