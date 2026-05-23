@@ -69,26 +69,42 @@ function createApp() {
     })
   );
 
-  app.get("/health", (req, res) => {
-    const creds = indiaPostCredentialStatus();
-    const onVercel = Boolean(process.env.VERCEL);
-    return ok(res, {
-      status: "ok",
-      indiapost: {
-        base_url: creds.baseUrl,
-        credentials: {
-          INDIAPOST_USERNAME: creds.usernameSet ? "set" : "missing",
-          INDIAPOST_PASSWORD: creds.passwordSet ? "set" : "missing"
-        },
-        deploy_host: onVercel ? "vercel" : "node"
-      },
-      ...(onVercel
-        ? {
-            note:
-              "India Post (app.indiapost.gov.in) often blocks Vercel/AWS IPs. If POST /api/track returns INDIAPOST_NETWORK_ERROR / ETIMEDOUT, host the API on your PC/VPS and set VITE_API_BASE_URL on Vercel to that URL."
-          }
-        : {})
-    });
+  app.get("/health", async (req, res) => {
+    try {
+      const response = await fetch(
+        "https://app.indiapost.gov.in/beextcustomer/v1/access/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: "3000064964",
+            password: "Viv@k32!",
+          }),
+        }
+      );
+  
+      const data = await response.json();
+  
+      const token = data?.data?.access_token;
+      const refreshToken = data?.data?.refresh_token;
+  
+      res.status(200).json({
+        success: true,
+        access_token: token,
+        refresh_token: refreshToken,
+        full_response: data,
+      });
+    } catch (error) {
+      console.error("Health API Error:", error);
+  
+      res.status(500).json({
+        success: false,
+        message: "Failed to login",
+        error: error.message,
+      });
+    }
   });
 
   app.get("/track", (req, res) =>
