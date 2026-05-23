@@ -14,16 +14,29 @@ const { trackRequestSchema } = require("../schemas/track");
 const { trackReportRequestSchema } = require("../schemas/trackReport");
 const { loginSchema } = require("../schemas/auth");
 const { createUserSchema, resetPasswordSchema } = require("../schemas/users");
-const { verifyUserCredentials, listUsers, createUser, deleteUser, resetUserPassword } = require("../lib/userStore");
+const {
+  verifyUserCredentials,
+  listUsers,
+  createUser,
+  deleteUser,
+  resetUserPassword,
+} = require("../lib/userStore");
 const config = require("../lib/config");
 const { bulkTrack } = require("../lib/indiaPostClient");
-const { createDownloadMeta, buildReportBuffer, buildUploadTemplateBuffer } = require("../lib/report");
+const {
+  createDownloadMeta,
+  buildReportBuffer,
+  buildUploadTemplateBuffer,
+} = require("../lib/report");
 const { UPLOAD_TEMPLATE_FILENAME } = require("../lib/reportFormats");
 const { requireAuth, requireRole } = require("./auth");
 const fullExportJob = require("../lib/fullExportJob");
 const exportShare = require("../lib/exportShare");
 const mongo = require("../lib/mongo");
-const { logIndiaPostEnvStatus, indiaPostCredentialStatus } = require("../lib/envCheck");
+const {
+  logIndiaPostEnvStatus,
+  indiaPostCredentialStatus,
+} = require("../lib/envCheck");
 
 function createApp() {
   const app = express();
@@ -38,8 +51,8 @@ function createApp() {
   app.use(
     cors({
       origin: true,
-      credentials: false
-    })
+      credentials: false,
+    }),
   );
   app.use(express.json({ limit: config.jsonBodyLimit }));
 
@@ -47,9 +60,9 @@ function createApp() {
     pinoHttp({
       redact: {
         paths: ["req.headers.authorization", "req.body.password"],
-        remove: true
-      }
-    })
+        remove: true,
+      },
+    }),
   );
 
   app.use(
@@ -65,8 +78,8 @@ function createApp() {
         if (/^\/track\/export-full-report\/[^/]+$/.test(p)) return true;
         if (/^\/share\/full-export\/[^/]+$/.test(p)) return true;
         return false;
-      }
-    })
+      },
+    }),
   );
 
   app.get("/health", async (req, res) => {
@@ -82,23 +95,18 @@ function createApp() {
             username: "3000064964",
             password: "Viv@k32!",
           }),
-        }
+        },
       );
-  
+
       const data = await response.json();
-  
-      const token = data?.data?.access_token;
-      const refreshToken = data?.data?.refresh_token;
-  
+
       res.status(200).json({
         success: true,
-        access_token: token,
-        refresh_token: refreshToken,
-        full_response: data,
+        data: data,
       });
     } catch (error) {
       console.error("Health API Error:", error);
-  
+
       res.status(500).json({
         success: false,
         message: "Failed to login",
@@ -112,9 +120,9 @@ function createApp() {
       res,
       405,
       "METHOD_NOT_ALLOWED",
-      "Use POST /api/track with JSON body: { \"consignments\": [\"EE123456789IN\", ...] }",
-      { allowed: ["POST"], example: { consignments: ["EE123456789IN"] } }
-    )
+      'Use POST /api/track with JSON body: { "consignments": ["EE123456789IN", ...] }',
+      { allowed: ["POST"], example: { consignments: ["EE123456789IN"] } },
+    ),
   );
 
   app.post("/auth/login", async (req, res, next) => {
@@ -124,67 +132,105 @@ function createApp() {
         throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
           issues: parsed.error.issues.map((i) => ({
             path: i.path.join("."),
-            message: i.message
-          }))
+            message: i.message,
+          })),
         });
       }
 
       const username = parsed.data.username.trim();
       const password = parsed.data.password;
 
-      const superUsername = String(process.env.SUPERADMIN_USERNAME || "superadmin").trim();
-      const superPassword = String(process.env.SUPERADMIN_PASSWORD || "superadmin").trim();
+      const superUsername = String(
+        process.env.SUPERADMIN_USERNAME || "superadmin",
+      ).trim();
+      const superPassword = String(
+        process.env.SUPERADMIN_PASSWORD || "superadmin",
+      ).trim();
 
-      if (username.toLowerCase() === superUsername.toLowerCase() && password === superPassword) {
-        const token = signToken({ sub: "superadmin", role: "superadmin", username: superUsername });
-        return ok(res, { token, user: { id: "superadmin", username: superUsername, role: "superadmin" } });
+      if (
+        username.toLowerCase() === superUsername.toLowerCase() &&
+        password === superPassword
+      ) {
+        const token = signToken({
+          sub: "superadmin",
+          role: "superadmin",
+          username: superUsername,
+        });
+        return ok(res, {
+          token,
+          user: {
+            id: "superadmin",
+            username: superUsername,
+            role: "superadmin",
+          },
+        });
       }
 
       const user = await verifyUserCredentials(username, password);
-      if (!user) throw new AppError("UNAUTHORIZED", "Invalid username or password", 401);
+      if (!user)
+        throw new AppError("UNAUTHORIZED", "Invalid username or password", 401);
 
-      const token = signToken({ sub: user.id, role: user.role, username: user.username });
+      const token = signToken({
+        sub: user.id,
+        role: user.role,
+        username: user.username,
+      });
       return ok(res, { token, user });
     } catch (err) {
       return next(err);
     }
   });
 
-  app.get("/users", requireAuth, requireRole("superadmin"), async (req, res, next) => {
-    try {
-      const users = await listUsers();
-      return ok(res, { count: users.length, items: users });
-    } catch (err) {
-      return next(err);
-    }
-  });
-
-  app.post("/users", requireAuth, requireRole("superadmin"), async (req, res, next) => {
-    try {
-      const parsed = createUserSchema.safeParse(req.body);
-      if (!parsed.success) {
-        throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
-          issues: parsed.error.issues.map((i) => ({
-            path: i.path.join("."),
-            message: i.message
-          }))
-        });
+  app.get(
+    "/users",
+    requireAuth,
+    requireRole("superadmin"),
+    async (req, res, next) => {
+      try {
+        const users = await listUsers();
+        return ok(res, { count: users.length, items: users });
+      } catch (err) {
+        return next(err);
       }
-      const created = await createUser(parsed.data);
-      return ok(res, created);
-    } catch (err) {
-      return next(err);
-    }
-  });
+    },
+  );
 
-  app.delete("/users/:id", requireAuth, requireRole("superadmin"), async (req, res, next) => {
-    try {
-      await deleteUser(String(req.params.id || ""));
-      return ok(res, { deleted: true });
-    } catch (err) {
-      return next(err);
-    }
-  });
+  app.post(
+    "/users",
+    requireAuth,
+    requireRole("superadmin"),
+    async (req, res, next) => {
+      try {
+        const parsed = createUserSchema.safeParse(req.body);
+        if (!parsed.success) {
+          throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
+            issues: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              message: i.message,
+            })),
+          });
+        }
+        const created = await createUser(parsed.data);
+        return ok(res, created);
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
+
+  app.delete(
+    "/users/:id",
+    requireAuth,
+    requireRole("superadmin"),
+    async (req, res, next) => {
+      try {
+        await deleteUser(String(req.params.id || ""));
+        return ok(res, { deleted: true });
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
 
   app.post(
     "/users/:id/reset-password",
@@ -197,24 +243,33 @@ function createApp() {
           throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
             issues: parsed.error.issues.map((i) => ({
               path: i.path.join("."),
-              message: i.message
-            }))
+              message: i.message,
+            })),
           });
         }
-        await resetUserPassword(String(req.params.id || ""), parsed.data.password);
+        await resetUserPassword(
+          String(req.params.id || ""),
+          parsed.data.password,
+        );
         return ok(res, { updated: true });
       } catch (err) {
         return next(err);
       }
-    }
+    },
   );
 
   /** Same .xlsx template as used by the app — generated only via `report.js`. */
   app.get("/track/upload-template", (req, res, next) => {
     try {
       const buf = buildUploadTemplateBuffer();
-      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename="${UPLOAD_TEMPLATE_FILENAME}"`);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${UPLOAD_TEMPLATE_FILENAME}"`,
+      );
       res.status(200).send(buf);
     } catch (err) {
       return next(err);
@@ -228,8 +283,8 @@ function createApp() {
         throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
           issues: parsed.error.issues.map((i) => ({
             path: i.path.join("."),
-            message: i.message
-          }))
+            message: i.message,
+          })),
         });
       }
 
@@ -249,8 +304,8 @@ function createApp() {
         throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
           issues: parsed.error.issues.map((i) => ({
             path: i.path.join("."),
-            message: i.message
-          }))
+            message: i.message,
+          })),
         });
       }
 
@@ -260,11 +315,14 @@ function createApp() {
       const tracking = await bulkTrack(consignments);
       const buf = await buildReportBuffer(format, tracking);
       const meta = createDownloadMeta(format, {
-        consignment: consignments.length === 1 ? consignments[0] : undefined
+        consignment: consignments.length === 1 ? consignments[0] : undefined,
       });
 
       res.setHeader("content-type", meta.contentType);
-      res.setHeader("content-disposition", `attachment; filename="${meta.filename}"`);
+      res.setHeader(
+        "content-disposition",
+        `attachment; filename="${meta.filename}"`,
+      );
       res.status(200).send(buf);
     } catch (err) {
       return next(err);
@@ -287,8 +345,8 @@ function createApp() {
         throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
           issues: parsed.error.issues.map((i) => ({
             path: i.path.join("."),
-            message: i.message
-          }))
+            message: i.message,
+          })),
         });
       }
       const consignments = parsed.data.consignments.map((c) => c.toUpperCase());
@@ -310,7 +368,7 @@ function createApp() {
           "NOT_READY",
           "Export is still processing, failed, or the file was already downloaded",
           409,
-          { status: job.status }
+          { status: job.status },
         );
       }
       streamFullExportZip(job, req, res, next);
@@ -323,7 +381,11 @@ function createApp() {
     try {
       const did = fullExportJob.cancelJob(req.params.id);
       if (!did) {
-        throw new AppError("NOT_FOUND", "Job not found or already finished", 404);
+        throw new AppError(
+          "NOT_FOUND",
+          "Job not found or already finished",
+          404,
+        );
       }
       return ok(res, { cancelled: true });
     } catch (err) {
@@ -349,10 +411,13 @@ function createApp() {
         "NOT_READY",
         "Export is still processing, failed, or the file was already downloaded",
         409,
-        { status: job.status }
+        { status: job.status },
       );
     }
-    const stamp = new Date(job.createdAt).toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const stamp = new Date(job.createdAt)
+      .toISOString()
+      .replace(/[:.]/g, "-")
+      .slice(0, 19);
     const filename = `IndiaPost_Full_Report_${stamp}.zip`;
 
     res.setHeader("Content-Type", "application/zip");
@@ -386,8 +451,8 @@ function createApp() {
         throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
           issues: parsed.error.issues.map((i) => ({
             path: i.path.join("."),
-            message: i.message
-          }))
+            message: i.message,
+          })),
         });
       }
       const consignments = parsed.data.consignments.map((c) => c.toUpperCase());
@@ -409,7 +474,7 @@ function createApp() {
         generatedAt: resolved.record.generatedAt,
         snapshotDate: resolved.record.snapshotDate,
         snapshotDateLabel: resolved.record.snapshotDateLabel,
-        job: fullExportJob.sanitizeJob(resolved.job)
+        job: fullExportJob.sanitizeJob(resolved.job),
       });
     } catch (err) {
       return next(err);
@@ -443,16 +508,23 @@ function createApp() {
     if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
       return fail(res, 400, "INVALID_JSON", "Request body must be valid JSON", {
         hint: 'POST /api/track with Content-Type: application/json and body { "consignments": ["..."] }',
-        parse_error: err.message
+        parse_error: err.message,
       });
     }
 
     if (err && err.name === "AppError") {
-      return fail(res, err.status || 500, err.code || "APP_ERROR", err.message, err.details);
+      return fail(
+        res,
+        err.status || 500,
+        err.code || "APP_ERROR",
+        err.message,
+        err.details,
+      );
     }
 
     const expose =
-      process.env.NODE_ENV !== "production" || process.env.VERCEL_ENV === "preview";
+      process.env.NODE_ENV !== "production" ||
+      process.env.VERCEL_ENV === "preview";
     const message =
       expose && err && err.message ? String(err.message) : "Unexpected error";
 
@@ -461,7 +533,7 @@ function createApp() {
       500,
       "INTERNAL_ERROR",
       message,
-      expose && err ? { name: err.name, code: err.code } : undefined
+      expose && err ? { name: err.name, code: err.code } : undefined,
     );
   });
 
@@ -479,7 +551,7 @@ async function start() {
     // eslint-disable-next-line no-console
     console.warn(
       "MongoDB connect failed — share links will not work until MONGODB_URI is set:",
-      err && err.message ? err.message : err
+      err && err.message ? err.message : err,
     );
   }
 
@@ -495,10 +567,12 @@ async function start() {
   });
   server.on("error", (err) => {
     // eslint-disable-next-line no-console
-    console.error("Failed to start server:", err && err.message ? err.message : err);
+    console.error(
+      "Failed to start server:",
+      err && err.message ? err.message : err,
+    );
     process.exitCode = 1;
   });
 }
 
 module.exports = { createApp, start };
-
