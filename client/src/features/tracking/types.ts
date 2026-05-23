@@ -4,6 +4,8 @@ export type TrackingEvent = {
   office: string | null;
   officeid: number | null;
   event: string | null;
+  /** Present when India Post sends remarks / non-delivery reason / similar fields */
+  remarks?: string | null;
 };
 
 export type TrackingItem = {

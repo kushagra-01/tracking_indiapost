@@ -23,6 +23,8 @@ import ViewListOutlinedIcon from "@mui/icons-material/ViewListOutlined";
 
 import { displayLabelChipColor, getShipmentDisplayLabelFromItem } from "./consignmentCategory";
 import { emojiForTrackingEvent } from "./eventEmoji";
+import { formatEventRemarksForDisplay } from "./eventRemarks";
+import { sortTrackingEventsDesc } from "./eventSort";
 import type { TrackingItem } from "./types";
 
 function shortBookingDate(v: unknown): string {
@@ -126,7 +128,13 @@ export function TrackingReportDialogContent({ item }: Props) {
   // const stages = journeyStagesWithState(item);
   // const maxIdx = furthestJourneyStage(item);
   const statusLabel = getShipmentDisplayLabelFromItem(item);
-  const events = Array.isArray(item.tracking_details) ? item.tracking_details : [];
+  const events = useMemo(
+    () =>
+      sortTrackingEventsDesc(
+        Array.isArray(item.tracking_details) ? item.tracking_details : []
+      ),
+    [item.tracking_details]
+  );
 
   const consMo = useMemo(() => {
     const m = fmt(bd.mo_number);
@@ -315,7 +323,7 @@ export function TrackingReportDialogContent({ item }: Props) {
         accent="primary"
         icon={<TimelineOutlinedIcon sx={{ fontSize: 20 }} />}
         title={`Event timeline (${events.length})`}
-        description="Oldest → newest — date, time, office, and remarks."
+        description="Newest → oldest — date, time, office, and remarks."
       >
         {events.length === 0 ? (
           <Paper
@@ -358,7 +366,7 @@ export function TrackingReportDialogContent({ item }: Props) {
               </TableHead>
               <TableBody>
                 {events.map((e, i) => {
-                  const isLast = i === events.length - 1;
+                  const isLatest = i === 0;
                   return (
                     <TableRow
                       key={i}
@@ -366,7 +374,7 @@ export function TrackingReportDialogContent({ item }: Props) {
                       sx={{
                         transition: "background-color 0.15s ease",
                         "&:nth-of-type(even)": { bgcolor: alpha(theme.palette.action.hover, 0.65) },
-                        ...(isLast
+                        ...(isLatest
                           ? {
                               bgcolor: alpha(primary, theme.palette.mode === "dark" ? 0.12 : 0.06),
                               "&:hover": { bgcolor: alpha(primary, theme.palette.mode === "dark" ? 0.16 : 0.09) }
@@ -379,7 +387,9 @@ export function TrackingReportDialogContent({ item }: Props) {
                       <TableCell sx={{ whiteSpace: "nowrap", fontWeight: 600 }}>{e.date ? shortBookingDate(e.date) : "—"}</TableCell>
                       <TableCell sx={{ opacity: 0.9 }}>{e.time || "—"}</TableCell>
                       <TableCell sx={{ color: "primary.main", fontWeight: 700, fontSize: "0.8rem" }}>{e.office || "—"}</TableCell>
-                      <TableCell sx={{ wordBreak: "break-word", fontWeight: 500 }}>{e.event || "—"}</TableCell>
+                      <TableCell sx={{ wordBreak: "break-word", fontWeight: 500 }}>
+                        {formatEventRemarksForDisplay(e)}
+                      </TableCell>
                     </TableRow>
                   );
                 })}

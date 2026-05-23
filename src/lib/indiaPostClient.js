@@ -1,6 +1,8 @@
 const axios = require("axios");
 const config = require("./config");
 const { AppError, rethrowUpstream } = require("./errors");
+const { extractEventRemarks } = require("./eventRemarks");
+const { sortTrackingEventsDesc } = require("./eventSort");
 
 const LOGIN_PATH = "/beextcustomer/v1/access/login";
 const REFRESH_PATH = "/beextcustomer/v1/access/TokenWithRtoken";
@@ -285,12 +287,21 @@ function normalizeBulkTrackingResponse(resp) {
 
   const items = body.data.map((row) => {
     const booking = row.booking_details || {};
-    const events = Array.isArray(row.tracking_details) ? row.tracking_details : [];
+    const rawEvents = Array.isArray(row.tracking_details) ? row.tracking_details : [];
     const del = row.del_status || {};
 
-    const lastEvent = events.length
-      ? events[events.length - 1]
-      : null;
+    const tracking_details = sortTrackingEventsDesc(
+      rawEvents.map((e) => ({
+        date: e.date || null,
+        time: e.time || null,
+        office: e.office || null,
+        officeid: e.officeid ?? null,
+        event: e.event || null,
+        remarks: extractEventRemarks(e)
+      }))
+    );
+
+    const lastEvent = tracking_details.length ? tracking_details[0] : null;
 
     return {
       consignment: booking.article_number || null,
@@ -316,13 +327,7 @@ function normalizeBulkTrackingResponse(resp) {
         delivery_confirmed_on: booking.delivery_confirmed_on || null,
         tariff: booking.tariff ?? null
       },
-      tracking_details: events.map((e) => ({
-        date: e.date || null,
-        time: e.time || null,
-        office: e.office || null,
-        officeid: e.officeid ?? null,
-        event: e.event || null
-      }))
+      tracking_details
     };
   });
 
