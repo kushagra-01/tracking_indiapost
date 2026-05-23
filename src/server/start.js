@@ -82,9 +82,13 @@ function createApp() {
     }),
   );
 
+  const https = require("https");
+
   app.get("/health", async (req, res) => {
     try {
-      console.log("Calling India Post API...");
+      const agent = new https.Agent({
+        rejectUnauthorized: false,
+      });
   
       const response = await fetch(
         "https://app.indiapost.gov.in/beextcustomer/v1/access/login",
@@ -92,32 +96,30 @@ function createApp() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-              "User-Agent": "Mozilla/5.0"
+            "User-Agent": "Mozilla/5.0",
           },
           body: JSON.stringify({
-            username: process.env.INDIAPOST_USERNAME,
-            password: process.env.INDIAPOST_PASSWORD,
+            username: 3000064964,
+            password: 'Viv@k32!',
           }),
+          agent,
         }
       );
   
-      console.log("Status:", response.status);
+      const data = await response.text();
   
-      const text = await response.text();
-  
-      console.log("Response:", text);
-  
-      res.send({
-        status: response.status,
-        data: text,
+      res.status(200).json({
+        success: true,
+        data,
       });
   
-    } catch (err) {
-      console.error("ERROR:", err);
+    } catch (error) {
+      console.error(error);
   
       res.status(500).json({
-        error: err.message,
-        stack: err.stack,
+        message: error.message,
+        stack: error.stack,
+        cause: error.cause,
       });
     }
   });
