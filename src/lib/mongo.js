@@ -2,8 +2,44 @@
  * MongoDB connection for share links and other persisted metadata.
  */
 
-const { MongoClient } = require("mongodb");
+const dns = require("dns");
+const { MongoClient, ServerApiVersion } = require("mongodb");
 const config = require("./config");
+
+/**
+ * Node on Windows often gets `querySrv ECONNREFUSED` when using router/link-local DNS.
+ * Public resolvers fix Atlas `mongodb+srv://` lookups. Set MONGODB_DNS_SERVERS=system to disable.
+ */
+function configureMongoDns() {
+  const raw = process.env.MONGODB_DNS_SERVERS;
+  if (raw === "system") return;
+  if (raw) {
+    dns.setServers(
+      raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    return;
+  }
+  if (process.platform === "win32") {
+    dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
+  }
+}
+
+configureMongoDns();
+
+function mongoClientOptions() {
+  const opts = {};
+  if (config.mongoUri && String(config.mongoUri).startsWith("mongodb+srv://")) {
+    opts.serverApi = {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true
+    };
+  }
+  return opts;
+}
 
 const EXPORT_SHARES = "export_shares";
 const USERS = "users";
@@ -41,8 +77,9 @@ async function connect() {
   if (database) return database;
   if (!connectPromise) {
     connectPromise = (async () => {
-      client = new MongoClient(config.mongoUri);
+      client = new MongoClient(config.mongoUri, mongoClientOptions());
       await client.connect();
+      await client.db("admin").command({ ping: 1 });
       database = client.db(config.mongoDbName);
       await ensureShareIndexes(database.collection(EXPORT_SHARES));
       await ensureUserIndexes(database.collection(USERS));
