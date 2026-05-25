@@ -24,7 +24,7 @@ import {
   type ShareExportStatus
 } from "../features/tracking/shareApi";
 
-type Phase = "loading" | "building" | "downloading" | "done" | "error";
+type Phase = "loading" | "building" | "ready" | "downloading" | "done" | "error";
 
 export function ShareDownloadPage() {
   const { token } = useParams<{ token: string }>();
@@ -64,7 +64,7 @@ export function ShareDownloadPage() {
     [token]
   );
 
-  const handleDownloadAgain = useCallback(() => {
+  const handleDownload = useCallback(() => {
     if (!status?.job.downloadReady) return;
     downloadStarted.current = false;
     void runDownload(status, true);
@@ -103,7 +103,7 @@ export function ShareDownloadPage() {
 
         if (data.job.downloadReady) {
           if (pollId) window.clearInterval(pollId);
-          void runDownload(data);
+          setPhase((p) => (p === "downloading" || p === "done" ? p : "ready"));
           return;
         }
 
@@ -131,12 +131,25 @@ export function ShareDownloadPage() {
       cancelled = true;
       if (pollId) window.clearInterval(pollId);
     };
-  }, [token, runDownload]);
+  }, [token]);
 
   const snapshotLabel = status?.snapshotDateLabel ?? "—";
   const zipReady = status?.job.downloadReady === true;
-  const showDownloadButton = zipReady && phase !== "loading" && phase !== "building";
   const zipName = status ? shareZipFilename(status.generatedAt) : null;
+  const downloadDisabled =
+    !zipReady || phase === "downloading" || phase === "loading" || (phase === "building" && !zipReady);
+  const downloadLabel =
+    phase === "downloading"
+      ? "Downloading…"
+      : phase === "done"
+        ? "Download again"
+        : phase === "error" && zipReady
+          ? "Try download again"
+          : zipReady
+            ? "Download ZIP"
+            : phase === "building"
+              ? "Preparing ZIP…"
+              : "Download ZIP";
 
   return (
     <Box
@@ -243,6 +256,14 @@ export function ShareDownloadPage() {
                 </Stack>
               ) : null}
 
+              {phase === "ready" && zipReady ? (
+                <Alert severity="info" icon={<CloudDownloadIcon />}>
+                  <Typography variant="body2">
+                    Your ZIP is ready{zipName ? <> — <b>{zipName}</b></> : null}. Click below to download.
+                  </Typography>
+                </Alert>
+              ) : null}
+
               {phase === "done" ? (
                 <Stack spacing={2}>
                   <Alert severity="success" icon={<CloudDownloadIcon />}>
@@ -262,7 +283,7 @@ export function ShareDownloadPage() {
 
               {err && zipReady ? <Alert severity="error">{err}</Alert> : null}
 
-              {showDownloadButton ? (
+              {phase !== "error" || zipReady ? (
                 <Button
                   variant="contained"
                   size="large"
@@ -270,19 +291,17 @@ export function ShareDownloadPage() {
                   startIcon={
                     phase === "downloading" ? (
                       <CircularProgress size={20} color="inherit" />
-                    ) : (
+                    ) : phase === "done" || (phase === "error" && zipReady) ? (
                       <ReplayIcon />
+                    ) : (
+                      <CloudDownloadIcon />
                     )
                   }
-                  onClick={handleDownloadAgain}
-                  disabled={phase === "downloading"}
+                  onClick={handleDownload}
+                  disabled={downloadDisabled}
                   sx={{ py: 1.25, fontWeight: 700, borderRadius: 2 }}
                 >
-                  {phase === "downloading"
-                    ? "Downloading…"
-                    : phase === "done"
-                      ? "Download again"
-                      : "Try download again"}
+                  {downloadLabel}
                 </Button>
               ) : null}
 
