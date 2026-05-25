@@ -4,6 +4,9 @@
   "buildCommand": "npm run build --prefix client",
   "outputDirectory": "client/dist",
   "framework": null,
+  "env": {
+    "VITE_API_BASE_URL": "https://tracking-indiapost.onrender.com"
+  },
   "functions": {
     "api/index.js": {
       "maxDuration": 60,

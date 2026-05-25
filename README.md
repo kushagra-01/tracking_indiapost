@@ -100,13 +100,10 @@ Simple liveness check.
    | `SUPERADMIN_USERNAME` | Recommended |
    | `SUPERADMIN_PASSWORD` | Recommended |
 
-5. After deploy, open `https://YOUR-SERVICE.onrender.com/health` — should return `{ "success": true, "data": { "status": "ok", ... } } }`.
-6. Point the React app at the API (build-time):
+5. After deploy, open `https://tracking-indiapost.onrender.com/health` — should return `{ "success": true, "data": { "status": "ok", ... } } }`.
+6. The React app is wired to that API via `client/.env.production` (`VITE_API_BASE_URL`). For Vercel, the same variable is set in `vercel.json`.
 
-   ```bash
-   # client/.env.production
-   VITE_API_BASE_URL=https://YOUR-SERVICE.onrender.com
-   ```
+   Local dev against Render (optional): create `client/.env.local` with `VITE_API_BASE_URL=https://tracking-indiapost.onrender.com` and run `npm run dev` in `client/`.
 
 **Notes**
 

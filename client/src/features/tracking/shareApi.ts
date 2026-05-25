@@ -1,14 +1,11 @@
 import axios from "axios";
 
-import { http } from "../../api/http";
+import { apiBaseUrl, http } from "../../api/http";
 import type { FullExportJobStatus } from "./api";
-
-const publicBase =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
 
 /** No Authorization header — public share endpoints only */
 const publicHttp = axios.create({
-  baseURL: publicBase,
+  baseURL: apiBaseUrl,
   timeout: 900_000
 });
 

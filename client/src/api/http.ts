@@ -1,9 +1,12 @@
 import axios from "axios";
 
-const baseURL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api";
+/** Trim trailing slash so paths like `/track` join correctly. */
+export const apiBaseUrl = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "/api"
+).replace(/\/$/, "");
 
 export const http = axios.create({
-  baseURL,
+  baseURL: apiBaseUrl,
   timeout: 30_000
 });
 
