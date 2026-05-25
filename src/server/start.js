@@ -13,13 +13,21 @@ const { signToken } = require("../lib/auth");
 const { trackRequestSchema } = require("../schemas/track");
 const { trackReportRequestSchema } = require("../schemas/trackReport");
 const { loginSchema } = require("../schemas/auth");
-const { createUserSchema, resetPasswordSchema } = require("../schemas/users");
+const {
+  createUserSchema,
+  resetPasswordSchema,
+  updateUserSchema,
+  profilePasswordSchema,
+} = require("../schemas/users");
 const {
   verifyUserCredentials,
   listUsers,
   createUser,
   deleteUser,
   resetUserPassword,
+  setUserActive,
+  updateOwnPassword,
+  getUserProfile,
 } = require("../lib/userStore");
 const config = require("../lib/config");
 const { bulkTrack } = require("../lib/indiaPostClient");
@@ -41,8 +49,12 @@ const {
 function createApp() {
   const app = express();
 
-  // Vercel / reverse proxies set X-Forwarded-For — required for express-rate-limit client IPs
-  if (process.env.VERCEL || process.env.TRUST_PROXY === "1") {
+  // Reverse proxies (Vercel, Render, nginx) — required for express-rate-limit client IPs
+  if (
+    process.env.VERCEL ||
+    process.env.RENDER ||
+    process.env.TRUST_PROXY === "1"
+  ) {
     app.set("trust proxy", 1);
   }
 
@@ -82,46 +94,13 @@ function createApp() {
     }),
   );
 
-  const https = require("https");
-
-  app.get("/health", async (req, res) => {
-    try {
-      const agent = new https.Agent({
-        rejectUnauthorized: false,
-      });
-  
-      const response = await fetch(
-        "https://app.indiapost.gov.in/beextcustomer/v1/access/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0",
-          },
-          body: JSON.stringify({
-            username: 3000064964,
-            password: 'Viv@k32!',
-          }),
-          agent,
-        }
-      );
-  
-      const data = await response.text();
-  
-      res.status(200).json({
-        success: true,
-        data,
-      });
-  
-    } catch (error) {
-      console.error(error);
-  
-      res.status(500).json({
-        message: error.message,
-        stack: error.stack,
-        cause: error.cause,
-      });
-    }
+  app.get("/health", (req, res) => {
+    const creds = indiaPostCredentialStatus();
+    return ok(res, {
+      status: "ok",
+      mongo: mongo.isConnected(),
+      indiapost_credentials: creds.configured,
+    });
   });
 
   app.get("/track", (req, res) =>
@@ -176,8 +155,13 @@ function createApp() {
       }
 
       const user = await verifyUserCredentials(username, password);
-      if (!user)
-        throw new AppError("UNAUTHORIZED", "Invalid username or password", 401);
+      if (!user) {
+        throw new AppError(
+          "UNAUTHORIZED",
+          "Invalid username or password, or account is inactive",
+          401,
+        );
+      }
 
       const token = signToken({
         sub: user.id,
@@ -241,6 +225,36 @@ function createApp() {
     },
   );
 
+  app.patch(
+    "/users/:id",
+    requireAuth,
+    requireRole("superadmin"),
+    async (req, res, next) => {
+      try {
+        const parsed = updateUserSchema.safeParse(req.body);
+        if (!parsed.success) {
+          throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
+            issues: parsed.error.issues.map((i) => ({
+              path: i.path.join("."),
+              message: i.message,
+            })),
+          });
+        }
+        const id = String(req.params.id || "");
+        if (parsed.data.password) {
+          await resetUserPassword(id, parsed.data.password);
+        }
+        if (parsed.data.active !== undefined) {
+          await setUserActive(id, parsed.data.active);
+        }
+        const user = await getUserProfile(id);
+        return ok(res, user);
+      } catch (err) {
+        return next(err);
+      }
+    },
+  );
+
   app.post(
     "/users/:id/reset-password",
     requireAuth,
@@ -266,6 +280,52 @@ function createApp() {
       }
     },
   );
+
+  app.get("/auth/me", requireAuth, async (req, res, next) => {
+    try {
+      if (req.auth.role === "superadmin") {
+        return ok(res, {
+          id: req.auth.sub,
+          username: req.auth.username,
+          role: "superadmin",
+          active: true,
+        });
+      }
+      const profile = await getUserProfile(req.auth.sub);
+      return ok(res, profile);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.patch("/auth/me/password", requireAuth, async (req, res, next) => {
+    try {
+      if (req.auth.role === "superadmin") {
+        throw new AppError(
+          "FORBIDDEN",
+          "SuperAdmin password is managed via environment variables",
+          403,
+        );
+      }
+      const parsed = profilePasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        });
+      }
+      await updateOwnPassword(
+        req.auth.sub,
+        parsed.data.currentPassword,
+        parsed.data.password,
+      );
+      return ok(res, { updated: true });
+    } catch (err) {
+      return next(err);
+    }
+  });
 
   /** Same .xlsx template as used by the app — generated only via `report.js`. */
   app.get("/track/upload-template", (req, res, next) => {

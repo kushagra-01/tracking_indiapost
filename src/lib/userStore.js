@@ -1,114 +1,142 @@
-const fs = require("fs/promises");
-const path = require("path");
-
+/**
+ * App users in MongoDB (superadmin remains env-based in login).
+ */
 const { AppError } = require("./errors");
 const { hashPassword, verifyPassword, newId } = require("./auth");
+const mongo = require("./mongo");
 
-function storePath() {
-  if (process.env.USER_STORE_PATH) return process.env.USER_STORE_PATH;
-  if (process.env.VERCEL) return path.join("/tmp", "indiapost-users.json");
-  return path.join(__dirname, "..", "data", "users.json");
-}
-
-async function ensureDir() {
-  const p = storePath();
-  try {
-    await fs.mkdir(path.dirname(p), { recursive: true });
-  } catch (err) {
-    if (err && err.code === "EEXIST") return;
+async function col() {
+  if (!process.env.MONGODB_URI) {
     throw new AppError(
-      "USER_STORE_ERROR",
-      `Cannot create user store directory: ${err && err.message ? err.message : err}`,
-      500
+      "MONGODB_REQUIRED",
+      "MONGODB_URI is required for user management",
+      503
     );
   }
+  await mongo.connect();
+  return mongo.getUsersCollection();
 }
 
-async function readStore() {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(storePath(), "utf8");
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.users)) {
-      return { users: [] };
-    }
-    return { users: parsed.users };
-  } catch (err) {
-    if (err && err.code === "ENOENT") return { users: [] };
-    throw new AppError("USER_STORE_ERROR", "Failed to read user store", 500);
-  }
-}
-
-async function writeStore(next) {
-  await ensureDir();
-  try {
-    await fs.writeFile(storePath(), JSON.stringify(next, null, 2), "utf8");
-  } catch (err) {
-    throw new AppError("USER_STORE_ERROR", "Failed to write user store", 500);
-  }
+function toPublicUser(doc) {
+  if (!doc) return null;
+  return {
+    id: doc.id,
+    username: doc.username,
+    role: doc.role || "user",
+    active: doc.active !== false,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt || doc.createdAt
+  };
 }
 
 async function listUsers() {
-  const st = await readStore();
-  return st.users.map((u) => ({
-    id: u.id,
-    username: u.username,
-    role: u.role,
-    createdAt: u.createdAt
-  }));
+  const users = await col();
+  const docs = await users.find({}).sort({ createdAt: -1 }).toArray();
+  return docs.map(toPublicUser);
+}
+
+async function findUserById(id) {
+  const users = await col();
+  const doc = await users.findOne({ id: String(id) });
+  return doc || null;
 }
 
 async function findUserByUsername(username) {
-  const st = await readStore();
-  const u = st.users.find((x) => String(x.username).toLowerCase() === String(username).toLowerCase());
-  return u || null;
+  const users = await col();
+  const doc = await users.findOne({ usernameLower: String(username).trim().toLowerCase() });
+  return doc || null;
 }
 
 async function createUser({ username, password, role }) {
   const uname = String(username || "").trim();
   if (!uname) throw new AppError("VALIDATION_ERROR", "Username is required", 400);
 
-  const st = await readStore();
-  const exists = st.users.some((u) => String(u.username).toLowerCase() === uname.toLowerCase());
+  const exists = await findUserByUsername(uname);
   if (exists) throw new AppError("CONFLICT", "Username already exists", 409);
 
-  const passwordHash = await hashPassword(password);
-
+  const now = new Date().toISOString();
   const user = {
     id: newId(),
     username: uname,
+    usernameLower: uname.toLowerCase(),
     role: role || "user",
-    passwordHash,
-    createdAt: new Date().toISOString()
+    passwordHash: await hashPassword(password),
+    active: true,
+    createdAt: now,
+    updatedAt: now
   };
 
-  st.users.push(user);
-  await writeStore(st);
-  return { id: user.id, username: user.username, role: user.role, createdAt: user.createdAt };
+  const users = await col();
+  await users.insertOne(user);
+  return toPublicUser(user);
 }
 
 async function deleteUser(id) {
-  const st = await readStore();
-  const before = st.users.length;
-  st.users = st.users.filter((u) => u.id !== id);
-  if (st.users.length === before) throw new AppError("NOT_FOUND", "User not found", 404);
-  await writeStore(st);
+  const users = await col();
+  const res = await users.deleteOne({ id: String(id) });
+  if (res.deletedCount === 0) throw new AppError("NOT_FOUND", "User not found", 404);
 }
 
 async function resetUserPassword(id, newPassword) {
-  const st = await readStore();
-  const idx = st.users.findIndex((u) => u.id === id);
-  if (idx === -1) throw new AppError("NOT_FOUND", "User not found", 404);
-  st.users[idx].passwordHash = await hashPassword(newPassword);
-  await writeStore(st);
+  const users = await col();
+  const res = await users.updateOne(
+    { id: String(id) },
+    {
+      $set: {
+        passwordHash: await hashPassword(newPassword),
+        updatedAt: new Date().toISOString()
+      }
+    }
+  );
+  if (res.matchedCount === 0) throw new AppError("NOT_FOUND", "User not found", 404);
+}
+
+async function setUserActive(id, active) {
+  const users = await col();
+  const res = await users.updateOne(
+    { id: String(id) },
+    { $set: { active: Boolean(active), updatedAt: new Date().toISOString() } }
+  );
+  if (res.matchedCount === 0) throw new AppError("NOT_FOUND", "User not found", 404);
+  const doc = await users.findOne({ id: String(id) });
+  return toPublicUser(doc);
+}
+
+async function updateOwnPassword(userId, currentPassword, newPassword) {
+  const doc = await findUserById(userId);
+  if (!doc) throw new AppError("NOT_FOUND", "User not found", 404);
+  if (doc.active === false) {
+    throw new AppError("FORBIDDEN", "Account is inactive", 403);
+  }
+
+  const ok = await verifyPassword(currentPassword, doc.passwordHash);
+  if (!ok) throw new AppError("UNAUTHORIZED", "Current password is incorrect", 401);
+
+  const users = await col();
+  await users.updateOne(
+    { id: String(userId) },
+    {
+      $set: {
+        passwordHash: await hashPassword(newPassword),
+        updatedAt: new Date().toISOString()
+      }
+    }
+  );
 }
 
 async function verifyUserCredentials(username, password) {
   const u = await findUserByUsername(username);
   if (!u) return null;
+  if (u.active === false) return null;
   const ok = await verifyPassword(password, u.passwordHash);
   if (!ok) return null;
-  return { id: u.id, username: u.username, role: u.role };
+  return toPublicUser(u);
+}
+
+async function getUserProfile(userId) {
+  const doc = await findUserById(userId);
+  if (!doc) throw new AppError("NOT_FOUND", "User not found", 404);
+  return toPublicUser(doc);
 }
 
 module.exports = {
@@ -116,6 +144,10 @@ module.exports = {
   createUser,
   deleteUser,
   resetUserPassword,
-  verifyUserCredentials
+  setUserActive,
+  updateOwnPassword,
+  verifyUserCredentials,
+  getUserProfile,
+  findUserById,
+  toPublicUser
 };
-

@@ -17,5 +17,27 @@ const resetPasswordSchema = z
   })
   .strict();
 
-module.exports = { createUserSchema, resetPasswordSchema, roleEnum };
+const updateUserSchema = z
+  .object({
+    active: z.boolean().optional(),
+    password: passwordSchema.optional()
+  })
+  .strict()
+  .refine((v) => v.active !== undefined || v.password !== undefined, {
+    message: "Provide active and/or password"
+  });
 
+const profilePasswordSchema = z
+  .object({
+    currentPassword: passwordSchema,
+    password: passwordSchema
+  })
+  .strict();
+
+module.exports = {
+  createUserSchema,
+  resetPasswordSchema,
+  updateUserSchema,
+  profilePasswordSchema,
+  roleEnum
+};

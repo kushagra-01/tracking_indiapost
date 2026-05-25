@@ -6,6 +6,7 @@ const { MongoClient } = require("mongodb");
 const config = require("./config");
 
 const EXPORT_SHARES = "export_shares";
+const USERS = "users";
 
 let client;
 let database;
@@ -17,6 +18,12 @@ async function ensureShareIndexes(col) {
   await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 }
 
+async function ensureUserIndexes(col) {
+  await col.createIndex({ id: 1 }, { unique: true });
+  await col.createIndex({ username: 1 }, { unique: true });
+  await col.createIndex({ usernameLower: 1 }, { unique: true });
+}
+
 async function connect() {
   if (database) return database;
   if (!connectPromise) {
@@ -25,6 +32,7 @@ async function connect() {
       await client.connect();
       database = client.db(config.mongoDbName);
       await ensureShareIndexes(database.collection(EXPORT_SHARES));
+      await ensureUserIndexes(database.collection(USERS));
       return database;
     })().catch((err) => {
       connectPromise = null;
@@ -37,6 +45,15 @@ async function connect() {
 async function getExportSharesCollection() {
   const db = await connect();
   return db.collection(EXPORT_SHARES);
+}
+
+async function getUsersCollection() {
+  const db = await connect();
+  return db.collection(USERS);
+}
+
+function isConnected() {
+  return Boolean(database);
 }
 
 async function closeMongo() {
@@ -52,5 +69,8 @@ module.exports = {
   connect,
   closeMongo,
   getExportSharesCollection,
-  EXPORT_SHARES
+  getUsersCollection,
+  isConnected,
+  EXPORT_SHARES,
+  USERS
 };

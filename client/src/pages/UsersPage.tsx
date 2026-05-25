@@ -5,12 +5,15 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   Stack,
+  Switch,
   TextField,
   Typography
 } from "@mui/material";
@@ -20,14 +23,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 
 import { useAuth } from "../features/auth/AuthContext";
-import { createUser, deleteUser, fetchUsers, resetUserPassword, type UserRow } from "../api/users";
+import {
+  createUser,
+  deleteUser,
+  fetchUsers,
+  resetUserPassword,
+  updateUser,
+  type UserRow
+} from "../api/users";
 
-export function UsersPage() {
-  const { user } = useAuth();
-  if (user?.role !== "superadmin") {
-    return <Alert severity="error">You are not allowed to view this page.</Alert>;
-  }
-
+function UsersPageContent() {
   const qc = useQueryClient();
   const usersQ = useQuery({ queryKey: ["users"], queryFn: fetchUsers });
 
@@ -47,6 +52,13 @@ export function UsersPage() {
 
   const resetM = useMutation({
     mutationFn: ({ id, password }: { id: string; password: string }) => resetUserPassword(id, password),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["users"] });
+    }
+  });
+
+  const activeM = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => updateUser(id, { active }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["users"] });
     }
@@ -81,7 +93,7 @@ export function UsersPage() {
             <Box sx={{ flex: 1 }}>
               <Typography sx={{ fontWeight: 800 }}>Create user</Typography>
               <Typography variant="body2" sx={{ opacity: 0.75, mt: 0.5 }}>
-                Users can login and track consignments. Only SuperAdmin can manage users.
+                Users are stored in MongoDB. Inactive users cannot log in.
               </Typography>
             </Box>
 
@@ -114,8 +126,9 @@ export function UsersPage() {
 
           {createM.error ? (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {(createM.error as any)?.response?.data?.error?.message ||
-                (createM.error as any)?.message ||
+              {(createM.error as { response?: { data?: { error?: { message?: string } } } })?.response
+                ?.data?.error?.message ||
+                (createM.error as Error)?.message ||
                 "Failed to create user"}
             </Alert>
           ) : null}
@@ -133,8 +146,9 @@ export function UsersPage() {
 
           {usersQ.error ? (
             <Alert severity="error">
-              {(usersQ.error as any)?.response?.data?.error?.message ||
-                (usersQ.error as any)?.message ||
+              {(usersQ.error as { response?: { data?: { error?: { message?: string } } } })?.response
+                ?.data?.error?.message ||
+                (usersQ.error as Error)?.message ||
                 "Failed to load users"}
             </Alert>
           ) : null}
@@ -148,27 +162,47 @@ export function UsersPage() {
                   gap: 1,
                   alignItems: "center",
                   justifyContent: "space-between",
+                  flexWrap: "wrap",
                   px: 1.5,
                   py: 1,
                   borderRadius: 2,
                   border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)"
+                  background: "rgba(255,255,255,0.03)",
+                  opacity: r.active ? 1 : 0.65
                 }}
               >
                 <Box>
-                  <Typography sx={{ fontWeight: 700 }}>{r.username}</Typography>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Typography sx={{ fontWeight: 700 }}>{r.username}</Typography>
+                    <Chip
+                      size="small"
+                      label={r.active ? "Active" : "Inactive"}
+                      color={r.active ? "success" : "default"}
+                    />
+                  </Stack>
                   <Typography variant="caption" sx={{ opacity: 0.75 }}>
                     Created: {new Date(r.createdAt).toLocaleString()}
                   </Typography>
                 </Box>
-                <Box>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={r.active}
+                        disabled={activeM.isPending}
+                        onChange={(_, checked) => activeM.mutate({ id: r.id, active: checked })}
+                      />
+                    }
+                    label="Active"
+                  />
                   <IconButton onClick={() => setResetTarget(r)} title="Reset password">
                     <KeyIcon />
                   </IconButton>
                   <IconButton onClick={() => setDeleteTarget(r)} title="Delete user" color="error">
                     <DeleteIcon />
                   </IconButton>
-                </Box>
+                </Stack>
               </Box>
             ))}
           </Stack>
@@ -247,3 +281,10 @@ export function UsersPage() {
   );
 }
 
+export function UsersPage() {
+  const { user } = useAuth();
+  if (user?.role !== "superadmin") {
+    return <Alert severity="error">You are not allowed to view this page.</Alert>;
+  }
+  return <UsersPageContent />;
+}

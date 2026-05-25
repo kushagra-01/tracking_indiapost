@@ -84,6 +84,36 @@ Response (normalized):
 
 Simple liveness check.
 
+## Deploy backend on Render
+
+1. Push this repo to GitHub/GitLab.
+2. In [Render](https://dashboard.render.com/) → **New** → **Blueprint** (or **Web Service**).
+3. Connect the repo. If using **Blueprint**, Render reads `render.yaml` at the repo root.
+4. Set **secret** environment variables in the Render dashboard (not in git):
+
+   | Variable | Required |
+   |----------|----------|
+   | `INDIAPOST_USERNAME` | Yes |
+   | `INDIAPOST_PASSWORD` | Yes |
+   | `JWT_SECRET` | Yes (long random string) |
+   | `MONGODB_URI` | Yes for share links ([MongoDB Atlas](https://www.mongodb.com/atlas) free tier) |
+   | `SUPERADMIN_USERNAME` | Recommended |
+   | `SUPERADMIN_PASSWORD` | Recommended |
+
+5. After deploy, open `https://YOUR-SERVICE.onrender.com/health` — should return `{ "success": true, "data": { "status": "ok", ... } } }`.
+6. Point the React app at the API (build-time):
+
+   ```bash
+   # client/.env.production
+   VITE_API_BASE_URL=https://YOUR-SERVICE.onrender.com
+   ```
+
+**Notes**
+
+- Free tier sleeps after inactivity; first request may be slow.
+- Full ZIP export jobs need a long-running instance (Starter plan or higher is more reliable than Free for large batches).
+- `render.yaml` sets `TRUST_PROXY=1` and `healthCheckPath: /health`.
+
 ## Notes
 
 - India Post token is obtained from:

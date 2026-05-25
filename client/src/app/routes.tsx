@@ -6,6 +6,7 @@ import { AppShell } from "./AppShell";
 import { DashboardPage } from "../pages/DashboardPage";
 import { UploadPage } from "../pages/UploadPage";
 import { UsersPage } from "../pages/UsersPage";
+import { ProfilePage } from "../pages/ProfilePage";
 import { ShareDownloadPage } from "../pages/ShareDownloadPage";
 
 export function AppRoutes() {
@@ -19,6 +20,7 @@ export function AppRoutes() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Route>

@@ -5,6 +5,9 @@
   "description": "Node/Express wrapper for India Post Bulk Tracking API",
   "main": "src/server.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",

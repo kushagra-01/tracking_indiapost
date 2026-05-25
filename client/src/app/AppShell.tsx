@@ -18,6 +18,7 @@ import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 import TrackChangesIcon from "@mui/icons-material/TrackChanges";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import PeopleIcon from "@mui/icons-material/People";
+import PersonIcon from "@mui/icons-material/Person";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import React from "react";
@@ -34,6 +35,7 @@ export function AppShell() {
   const nav = [
     { to: "/", label: "Dashboard", icon: <TrackChangesIcon /> },
     { to: "/upload", label: "Upload Consignments", icon: <UploadFileIcon /> },
+    { to: "/profile", label: "My profile", icon: <PersonIcon /> },
     ...(user?.role === "superadmin"
       ? [{ to: "/users", label: "Users", icon: <PeopleIcon /> }]
       : [])
