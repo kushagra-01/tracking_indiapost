@@ -131,7 +131,7 @@ export function SettingsPage() {
                   label="Value"
                   type="number"
                   size="small"
-                  inputProps={{ min: 1 }}
+                  slotProps={{ htmlInput: { min: 1 } }}
                   value={consignmentCache.value}
                   onChange={(e) => setConsignmentCache((s) => ({ ...s, value: e.target.value }))}
                   sx={{ maxWidth: 140 }}
@@ -168,7 +168,7 @@ export function SettingsPage() {
                   label="Value"
                   type="number"
                   size="small"
-                  inputProps={{ min: 1 }}
+                  slotProps={{ htmlInput: { min: 1 } }}
                   value={shareLinkExpiry.value}
                   onChange={(e) => setShareLinkExpiry((s) => ({ ...s, value: e.target.value }))}
                   sx={{ maxWidth: 140 }}
