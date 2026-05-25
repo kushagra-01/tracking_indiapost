@@ -13,7 +13,6 @@ const archiver = require("archiver");
 
 const config = require("./config");
 const { bulkTrack } = require("./trackingService");
-const exportShare = require("./exportShare");
 const { buildReportBuffer } = require("./report");
 const { getShipmentDisplayLabelFromItem, emptyFolderCounts, SHIPMENT_FOLDER_LABELS } = require("./consignmentCategory");
 
@@ -67,7 +66,8 @@ function singleItemTracking(full, item) {
 function touch(job, patch) {
   Object.assign(job, patch, { updatedAt: Date.now() });
   if (job.shareToken) {
-    void exportShare.syncShareJobProgress(job);
+    // Lazy require avoids circular dependency with exportShare → fullExportJob
+    void require("./exportShare").syncShareJobProgress(job);
   }
 }
 
@@ -220,7 +220,7 @@ async function runOneJob(job) {
       fileSize: st.size
     });
     if (job.shareToken) {
-      await exportShare.onShareJobComplete(job);
+      await require("./exportShare").onShareJobComplete(job);
     }
   } catch (e) {
     const isCancel = e && (e.message === "CANCELLED" || job.abortRequested);
