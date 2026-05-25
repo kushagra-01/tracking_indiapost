@@ -3,6 +3,7 @@ import { saveAs } from "file-saver";
 import {
   Alert,
   Box,
+  Button,
   Card,
   CardContent,
   CircularProgress,
@@ -13,6 +14,7 @@ import {
 } from "@mui/material";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import FolderZipIcon from "@mui/icons-material/FolderZip";
+import ReplayIcon from "@mui/icons-material/Replay";
 import { useParams } from "react-router-dom";
 
 import {
@@ -34,26 +36,39 @@ export function ShareDownloadPage() {
   const [err, setErr] = useState<string | null>(null);
   const downloadStarted = useRef(false);
 
-  const runDownload = useCallback(async (meta: ShareExportStatus) => {
-    if (!token || downloadStarted.current) return;
-    downloadStarted.current = true;
-    setPhase("downloading");
-    setDlPct(0);
-    try {
-      const blob = await downloadShareExportZip(token, (pct) => setDlPct(pct));
-      saveAs(blob, shareZipFilename(meta.generatedAt));
-      setDlPct(100);
-      setPhase("done");
-    } catch (e: unknown) {
-      downloadStarted.current = false;
-      const msg =
-        e && typeof e === "object" && "message" in e
-          ? String((e as { message: string }).message)
-          : "Download failed";
-      setErr(msg);
-      setPhase("error");
-    }
-  }, [token]);
+  const runDownload = useCallback(
+    async (meta: ShareExportStatus, retry = false) => {
+      if (!token) return;
+      if (downloadStarted.current && !retry) return;
+
+      downloadStarted.current = true;
+      setErr(null);
+      setPhase("downloading");
+      setDlPct(0);
+
+      try {
+        const blob = await downloadShareExportZip(token, (pct) => setDlPct(pct));
+        saveAs(blob, shareZipFilename(meta.generatedAt));
+        setDlPct(100);
+        setPhase("done");
+      } catch (e: unknown) {
+        downloadStarted.current = false;
+        const msg =
+          e && typeof e === "object" && "message" in e
+            ? String((e as { message: string }).message)
+            : "Download failed";
+        setErr(msg);
+        setPhase("error");
+      }
+    },
+    [token]
+  );
+
+  const handleDownloadAgain = useCallback(() => {
+    if (!status?.job.downloadReady) return;
+    downloadStarted.current = false;
+    void runDownload(status, true);
+  }, [status, runDownload]);
 
   useEffect(() => {
     if (!token) {
@@ -119,6 +134,9 @@ export function ShareDownloadPage() {
   }, [token, runDownload]);
 
   const snapshotLabel = status?.snapshotDateLabel ?? "—";
+  const zipReady = status?.job.downloadReady === true;
+  const showDownloadButton = zipReady && phase !== "loading" && phase !== "building";
+  const zipName = status ? shareZipFilename(status.generatedAt) : null;
 
   return (
     <Box
@@ -175,66 +193,98 @@ export function ShareDownloadPage() {
                 </Alert>
               ) : null}
 
-              {err ? (
-                <Alert severity="error">{err}</Alert>
-              ) : (
-                <>
-                  {phase === "loading" || (phase === "building" && !status) ? (
-                    <Stack spacing={2} sx={{ py: 3, alignItems: "center" }}>
-                      <CircularProgress size={48} />
-                      <Typography sx={{ opacity: 0.8 }}>Connecting to server…</Typography>
-                    </Stack>
-                  ) : null}
+              {err && !zipReady ? <Alert severity="error">{err}</Alert> : null}
 
-                  {phase === "building" && status ? (
-                    <Stack spacing={1.5}>
-                      <Typography sx={{ fontWeight: 700 }}>Preparing your ZIP on the server</Typography>
-                      <Typography variant="body2" sx={{ opacity: 0.75 }}>
-                        Master Excel + PDFs per article (same as dashboard full export). No login required.
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={buildPct}
-                        sx={{ height: 10, borderRadius: 2 }}
-                        color="primary"
-                      />
-                      <Stack direction="row" sx={{ justifyContent: "space-between" }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                          {buildPct}%
-                        </Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.7, maxWidth: "70%", textAlign: "right" }}>
-                          {buildDetail}
-                        </Typography>
-                      </Stack>
-                    </Stack>
-                  ) : null}
+              {phase === "loading" || (phase === "building" && !status) ? (
+                <Stack spacing={2} sx={{ py: 3, alignItems: "center" }}>
+                  <CircularProgress size={48} />
+                  <Typography sx={{ opacity: 0.8 }}>Connecting to server…</Typography>
+                </Stack>
+              ) : null}
 
-                  {phase === "downloading" ? (
-                    <Stack spacing={1.5}>
-                      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                        <CloudDownloadIcon color="primary" />
-                        <Typography sx={{ fontWeight: 700 }}>Downloading ZIP to your device</Typography>
-                      </Stack>
-                      <LinearProgress
-                        variant={dlPct == null ? "indeterminate" : "determinate"}
-                        value={dlPct ?? 0}
-                        sx={{ height: 10, borderRadius: 2 }}
-                        color="secondary"
-                      />
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                        {dlPct == null ? "Starting download…" : `${dlPct}%`}
-                      </Typography>
-                    </Stack>
-                  ) : null}
+              {phase === "building" && status ? (
+                <Stack spacing={1.5}>
+                  <Typography sx={{ fontWeight: 700 }}>Preparing your ZIP on the server</Typography>
+                  <Typography variant="body2" sx={{ opacity: 0.75 }}>
+                    Master Excel + PDFs per article (same as dashboard full export). No login required.
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={buildPct}
+                    sx={{ height: 10, borderRadius: 2 }}
+                    color="primary"
+                  />
+                  <Stack direction="row" sx={{ justifyContent: "space-between" }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      {buildPct}%
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.7, maxWidth: "70%", textAlign: "right" }}>
+                      {buildDetail}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              ) : null}
 
-                  {phase === "done" ? (
-                    <Alert severity="success" icon={<CloudDownloadIcon />}>
-                      Download complete. You can close this tab or download again from your browser history if
-                      needed.
-                    </Alert>
-                  ) : null}
-                </>
-              )}
+              {phase === "downloading" ? (
+                <Stack spacing={1.5}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <CloudDownloadIcon color="primary" />
+                    <Typography sx={{ fontWeight: 700 }}>Downloading ZIP to your device</Typography>
+                  </Stack>
+                  <LinearProgress
+                    variant={dlPct == null ? "indeterminate" : "determinate"}
+                    value={dlPct ?? 0}
+                    sx={{ height: 10, borderRadius: 2 }}
+                    color="secondary"
+                  />
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    {dlPct == null ? "Starting download…" : `${dlPct}%`}
+                  </Typography>
+                </Stack>
+              ) : null}
+
+              {phase === "done" ? (
+                <Stack spacing={2}>
+                  <Alert severity="success" icon={<CloudDownloadIcon />}>
+                    <Typography variant="body2" component="div">
+                      Download complete
+                      {zipName ? (
+                        <>
+                          {" "}
+                          — saved as <b>{zipName}</b>
+                        </>
+                      ) : null}
+                      . Check your browser&apos;s downloads folder if you don&apos;t see the file.
+                    </Typography>
+                  </Alert>
+                </Stack>
+              ) : null}
+
+              {err && zipReady ? <Alert severity="error">{err}</Alert> : null}
+
+              {showDownloadButton ? (
+                <Button
+                  variant="contained"
+                  size="large"
+                  fullWidth
+                  startIcon={
+                    phase === "downloading" ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      <ReplayIcon />
+                    )
+                  }
+                  onClick={handleDownloadAgain}
+                  disabled={phase === "downloading"}
+                  sx={{ py: 1.25, fontWeight: 700, borderRadius: 2 }}
+                >
+                  {phase === "downloading"
+                    ? "Downloading…"
+                    : phase === "done"
+                      ? "Download again"
+                      : "Try download again"}
+                </Button>
+              ) : null}
 
               <Typography variant="caption" sx={{ opacity: 0.55, textAlign: "center" }}>
                 Secure shared link · no login required · expires after the period set by your administrator (typically 30 days)
