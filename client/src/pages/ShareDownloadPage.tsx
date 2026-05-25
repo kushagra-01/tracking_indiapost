@@ -98,7 +98,7 @@ export function ShareDownloadPage() {
         const ax = e as { response?: { status?: number; data?: { error?: { message?: string } } } };
         const msg =
           ax?.response?.status === 404
-            ? "This link has expired or does not exist."
+            ? "This download link has expired or does not exist. Ask the sender to create a new share link from the dashboard."
             : ax?.response?.data?.error?.message ||
               (e && typeof e === "object" && "message" in e
                 ? String((e as { message: string }).message)
@@ -237,7 +237,7 @@ export function ShareDownloadPage() {
               )}
 
               <Typography variant="caption" sx={{ opacity: 0.55, textAlign: "center" }}>
-                Secure shared link · no password · expires after server retention window
+                Secure shared link · no login required · expires after the period set by your administrator (typically 30 days)
               </Typography>
             </Stack>
           </CardContent>

@@ -12,7 +12,8 @@ const { finished } = require("stream/promises");
 const archiver = require("archiver");
 
 const config = require("./config");
-const { bulkTrack } = require("./indiaPostClient");
+const { bulkTrack } = require("./trackingService");
+const exportShare = require("./exportShare");
 const { buildReportBuffer } = require("./report");
 const { getShipmentDisplayLabelFromItem, emptyFolderCounts, SHIPMENT_FOLDER_LABELS } = require("./consignmentCategory");
 
@@ -65,6 +66,9 @@ function singleItemTracking(full, item) {
 
 function touch(job, patch) {
   Object.assign(job, patch, { updatedAt: Date.now() });
+  if (job.shareToken) {
+    void exportShare.syncShareJobProgress(job);
+  }
 }
 
 function pruneJobs() {
@@ -215,6 +219,9 @@ async function runOneJob(job) {
       filePath: outPath,
       fileSize: st.size
     });
+    if (job.shareToken) {
+      await exportShare.onShareJobComplete(job);
+    }
   } catch (e) {
     const isCancel = e && (e.message === "CANCELLED" || job.abortRequested);
     try {
@@ -264,7 +271,7 @@ function enqueue(id) {
  * @param {string[]} consignments uppercased list
  * @returns {string} job id
  */
-function createJob(consignments) {
+function createJob(consignments, opts = {}) {
   pruneJobs();
   const id = crypto.randomUUID();
   const job = {
@@ -277,6 +284,7 @@ function createJob(consignments) {
     filePath: null,
     fileSize: null,
     consignments,
+    shareToken: opts.shareToken || null,
     abortRequested: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),

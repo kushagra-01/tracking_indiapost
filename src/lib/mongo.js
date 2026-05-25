@@ -7,6 +7,9 @@ const config = require("./config");
 
 const EXPORT_SHARES = "export_shares";
 const USERS = "users";
+const APP_SETTINGS = "app_settings";
+const CONSIGNMENT_CACHE = "consignment_cache";
+const SHARE_ZIP_BUCKET = "share_export_zips";
 
 let client;
 let database;
@@ -24,6 +27,16 @@ async function ensureUserIndexes(col) {
   await col.createIndex({ usernameLower: 1 }, { unique: true });
 }
 
+async function ensureConsignmentCacheIndexes(col) {
+  await col.createIndex({ consignment: 1 }, { unique: true });
+  await col.createIndex({ searchedAt: 1 });
+}
+
+async function ensureShareZipIndexes(db) {
+  const files = db.collection(`${SHARE_ZIP_BUCKET}.files`);
+  await files.createIndex({ "metadata.token": 1, uploadDate: -1 });
+}
+
 async function connect() {
   if (database) return database;
   if (!connectPromise) {
@@ -33,6 +46,8 @@ async function connect() {
       database = client.db(config.mongoDbName);
       await ensureShareIndexes(database.collection(EXPORT_SHARES));
       await ensureUserIndexes(database.collection(USERS));
+      await ensureConsignmentCacheIndexes(database.collection(CONSIGNMENT_CACHE));
+      await ensureShareZipIndexes(database);
       return database;
     })().catch((err) => {
       connectPromise = null;
@@ -50,6 +65,22 @@ async function getExportSharesCollection() {
 async function getUsersCollection() {
   const db = await connect();
   return db.collection(USERS);
+}
+
+async function getAppSettingsCollection() {
+  const db = await connect();
+  return db.collection(APP_SETTINGS);
+}
+
+async function getConsignmentCacheCollection() {
+  const db = await connect();
+  return db.collection(CONSIGNMENT_CACHE);
+}
+
+async function getShareZipBucket() {
+  const db = await connect();
+  const { GridFSBucket } = require("mongodb");
+  return new GridFSBucket(db, { bucketName: SHARE_ZIP_BUCKET });
 }
 
 function isConnected() {
@@ -70,7 +101,13 @@ module.exports = {
   closeMongo,
   getExportSharesCollection,
   getUsersCollection,
+  getAppSettingsCollection,
+  getConsignmentCacheCollection,
+  getShareZipBucket,
   isConnected,
   EXPORT_SHARES,
-  USERS
+  USERS,
+  APP_SETTINGS,
+  CONSIGNMENT_CACHE,
+  SHARE_ZIP_BUCKET
 };

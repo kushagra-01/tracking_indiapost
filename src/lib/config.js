@@ -61,6 +61,9 @@ module.exports = {
   /** Max export jobs kept in memory (oldest pruned first). */
   exportFullMaxJobs: clamp(intEnv("EXPORT_FULL_MAX_JOBS", 40), 5, 500),
 
-  /** Public share links for full ZIP exports (ms). */
-  exportShareTtlMs: intEnv("EXPORT_SHARE_TTL_MS", 1_800_000),
+  /**
+   * Fallback share link TTL (ms) when MongoDB settings are unavailable.
+   * Default 30 days — live value is configured in Admin → Settings.
+   */
+  exportShareTtlMs: intEnv("EXPORT_SHARE_TTL_MS", 30 * 86_400_000),
 };

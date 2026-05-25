@@ -3,7 +3,7 @@ import { http } from "./http";
 export type UserRow = {
   id: string;
   username: string;
-  role: "user";
+  role: "user" | "admin";
   active: boolean;
   createdAt: string;
   updatedAt?: string;
@@ -12,7 +12,7 @@ export type UserRow = {
 export type UserProfile = {
   id: string;
   username: string;
-  role: "user" | "superadmin";
+  role: "user" | "admin" | "superadmin";
   active: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -23,8 +23,8 @@ export async function fetchUsers(): Promise<{ count: number; items: UserRow[] }>
   return resp.data.data;
 }
 
-export async function createUser(args: { username: string; password: string }) {
-  const resp = await http.post("/users", { ...args, role: "user" });
+export async function createUser(args: { username: string; password: string; role?: "user" | "admin" }) {
+  const resp = await http.post("/users", { username: args.username, password: args.password, role: args.role || "user" });
   return resp.data.data as UserRow;
 }
 

@@ -20,7 +20,7 @@ function requireAuth(req, res, next) {
 
   req.auth = payload;
 
-  if (payload.role === "superadmin") {
+  if (payload.role === "superadmin" && payload.sub === "superadmin") {
     return next();
   }
 
@@ -47,4 +47,17 @@ function requireRole(role) {
   };
 }
 
-module.exports = { requireAuth, requireRole };
+/** SuperAdmin or Admin — for app settings and similar. */
+function requireAdminAccess(req, res, next) {
+  try {
+    const role = req.auth?.role;
+    if (role === "superadmin" || role === "admin") {
+      return next();
+    }
+    throw new AppError("FORBIDDEN", "Insufficient permissions", 403);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = { requireAuth, requireRole, requireAdminAccess };

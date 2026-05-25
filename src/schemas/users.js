@@ -1,7 +1,7 @@
 const { z } = require("zod");
 const { usernameSchema, passwordSchema } = require("./auth");
 
-const roleEnum = z.enum(["user"]);
+const roleEnum = z.enum(["user", "admin", "superadmin"]);
 
 const createUserSchema = z
   .object({

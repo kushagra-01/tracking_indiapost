@@ -47,6 +47,7 @@ import {
   trackConsignmentsWithProgress
 } from "../features/tracking/api";
 import { formatApiError } from "../api/formatApiError";
+import { formatExpiryDate } from "../api/settings";
 import { buildSharePageUrl, createFullExportShareLink } from "../features/tracking/shareApi";
 import {
   displayLabelChipColor,
@@ -220,6 +221,8 @@ export function DashboardPage() {
   const [shareSnapshotLabel, setShareSnapshotLabel] = useState<string | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareExpiresAt, setShareExpiresAt] = useState<number | null>(null);
+  const [shareReused, setShareReused] = useState(false);
 
   const items = tracking?.items ?? [];
 
@@ -401,6 +404,8 @@ export function DashboardPage() {
       const meta = await createFullExportShareLink(zipConsignments);
       setShareUrl(buildSharePageUrl(meta.token));
       setShareSnapshotLabel(meta.snapshotDateLabel);
+      setShareExpiresAt(meta.expiresAt ?? null);
+      setShareReused(Boolean(meta.reused));
       setShareOpen(true);
       const { items: rows } = await listFullExportJobs();
       setExportJobs(rows);
@@ -471,6 +476,21 @@ export function DashboardPage() {
       {err ? (
         <Alert severity="error" sx={{ whiteSpace: "pre-wrap" }}>
           {err}
+        </Alert>
+      ) : null}
+
+      {tracking?.fromCache && tracking.fromCache > 0 ? (
+        <Alert severity="info">
+          Showing cached tracking for <b>{tracking.fromCache}</b> consignment
+          {tracking.fromCache === 1 ? "" : "s"}
+          {tracking.fetched ? (
+            <>
+              ; <b>{tracking.fetched}</b> refreshed from India Post
+            </>
+          ) : (
+            " (no new India Post calls needed)"
+          )}
+          . Change the refresh window in Settings.
         </Alert>
       ) : null}
 
@@ -686,6 +706,12 @@ export function DashboardPage() {
                   shows build <b>%</b>, then auto-downloads the same full report ZIP ({zipConsignments.length}{" "}
                   article{zipConsignments.length === 1 ? "" : "s"}).
                 </Typography>
+                {shareReused ? (
+                  <Alert severity="success" variant="outlined">
+                    An active share link for this same consignment set already exists — reusing it (no new export
+                    needed).
+                  </Alert>
+                ) : null}
                 {shareSnapshotLabel ? (
                   <Alert severity="warning" variant="outlined">
                     This link is generated on <b>{shareSnapshotLabel}</b>. Recipients will see tracking data{" "}
@@ -694,7 +720,15 @@ export function DashboardPage() {
                 ) : null}
                 <Alert severity="info" variant="outlined">
                   Export starts immediately on the server. Recipients see live build progress, then automatic download
-                  with transfer <b>%</b>. Links expire after the server retention window (~30 min).
+                  with transfer <b>%</b>.
+                  {shareExpiresAt ? (
+                    <>
+                      {" "}
+                      Link expires on <b>{formatExpiryDate(shareExpiresAt)}</b> (configure in Settings).
+                    </>
+                  ) : (
+                    <> Links expire after the period set in Admin → Settings (default 30 days).</>
+                  )}
                 </Alert>
                 <TextField
                   label="Share URL"

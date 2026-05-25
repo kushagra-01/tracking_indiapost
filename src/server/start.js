@@ -28,16 +28,20 @@ const {
   setUserActive,
   updateOwnPassword,
   getUserProfile,
+  ensureDefaultSuperAdmin,
 } = require("../lib/userStore");
 const config = require("../lib/config");
-const { bulkTrack } = require("../lib/indiaPostClient");
+const { bulkTrack } = require("../lib/trackingService");
+const appSettings = require("../lib/appSettings");
+const { updateSettingsSchema } = require("../schemas/settings");
+const shareZipStore = require("../lib/shareZipStore");
 const {
   createDownloadMeta,
   buildReportBuffer,
   buildUploadTemplateBuffer,
 } = require("../lib/report");
 const { UPLOAD_TEMPLATE_FILENAME } = require("../lib/reportFormats");
-const { requireAuth, requireRole } = require("./auth");
+const { requireAuth, requireRole, requireAdminAccess } = require("./auth");
 const fullExportJob = require("../lib/fullExportJob");
 const exportShare = require("../lib/exportShare");
 const mongo = require("../lib/mongo");
@@ -128,34 +132,32 @@ function createApp() {
       const username = parsed.data.username.trim();
       const password = parsed.data.password;
 
-      const superUsername = String(
-        process.env.SUPERADMIN_USERNAME || "superadmin",
-      ).trim();
-      const superPassword = String(
-        process.env.SUPERADMIN_PASSWORD || "superadmin",
-      ).trim();
-
-      if (
-        username.toLowerCase() === superUsername.toLowerCase() &&
-        password === superPassword
-      ) {
-        const token = signToken({
-          sub: "superadmin",
-          role: "superadmin",
-          username: superUsername,
-        });
-        return ok(res, {
-          token,
-          user: {
-            id: "superadmin",
-            username: superUsername,
-            role: "superadmin",
-          },
-        });
-      }
-
       const user = await verifyUserCredentials(username, password);
       if (!user) {
+        const superUsername = String(
+          process.env.SUPERADMIN_USERNAME || "superadmin",
+        ).trim();
+        const superPassword = String(
+          process.env.SUPERADMIN_PASSWORD || "superadmin",
+        ).trim();
+        if (
+          username.toLowerCase() === superUsername.toLowerCase() &&
+          password === superPassword
+        ) {
+          const token = signToken({
+            sub: "superadmin",
+            role: "superadmin",
+            username: superUsername,
+          });
+          return ok(res, {
+            token,
+            user: {
+              id: "superadmin",
+              username: superUsername,
+              role: "superadmin",
+            },
+          });
+        }
         throw new AppError(
           "UNAUTHORIZED",
           "Invalid username or password, or account is inactive",
@@ -283,7 +285,7 @@ function createApp() {
 
   app.get("/auth/me", requireAuth, async (req, res, next) => {
     try {
-      if (req.auth.role === "superadmin") {
+      if (req.auth.role === "superadmin" && req.auth.sub === "superadmin") {
         return ok(res, {
           id: req.auth.sub,
           username: req.auth.username,
@@ -300,7 +302,7 @@ function createApp() {
 
   app.patch("/auth/me/password", requireAuth, async (req, res, next) => {
     try {
-      if (req.auth.role === "superadmin") {
+      if (req.auth.role === "superadmin" && req.auth.sub === "superadmin") {
         throw new AppError(
           "FORBIDDEN",
           "SuperAdmin password is managed via environment variables",
@@ -322,6 +324,37 @@ function createApp() {
         parsed.data.password,
       );
       return ok(res, { updated: true });
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.get("/settings", requireAuth, requireAdminAccess, async (req, res, next) => {
+    try {
+      const settings = await appSettings.getSettings({ fresh: true });
+      return ok(res, settings);
+    } catch (err) {
+      return next(err);
+    }
+  });
+
+  app.patch("/settings", requireAuth, requireAdminAccess, async (req, res, next) => {
+    try {
+      const parsed = updateSettingsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError("VALIDATION_ERROR", "Invalid request body", 400, {
+          issues: parsed.error.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        });
+      }
+      const settings = await appSettings.updateSettings(parsed.data, {
+        sub: req.auth.sub,
+        username: req.auth.username,
+        role: req.auth.role,
+      });
+      return ok(res, settings);
     } catch (err) {
       return next(err);
     }
@@ -432,15 +465,7 @@ function createApp() {
       if (!job) {
         throw new AppError("NOT_FOUND", "Export job not found", 404);
       }
-      if (job.status !== "done" || !job.filePath) {
-        throw new AppError(
-          "NOT_READY",
-          "Export is still processing, failed, or the file was already downloaded",
-          409,
-          { status: job.status },
-        );
-      }
-      streamFullExportZip(job, req, res, next);
+      await streamFullExportZip(job, req, res, next);
     } catch (err) {
       return next(err);
     }
@@ -474,42 +499,67 @@ function createApp() {
     }
   });
 
-  function streamFullExportZip(job, req, res, next) {
-    if (job.status !== "done" || !job.filePath) {
-      throw new AppError(
-        "NOT_READY",
-        "Export is still processing, failed, or the file was already downloaded",
-        409,
-        { status: job.status },
-      );
-    }
+  async function streamFullExportZip(job, req, res, next) {
     const stamp = new Date(job.createdAt)
       .toISOString()
       .replace(/[:.]/g, "-")
       .slice(0, 19);
     const filename = `IndiaPost_Full_Report_${stamp}.zip`;
 
+    if (job.status !== "done") {
+      return next(
+        new AppError(
+          "NOT_READY",
+          "Export is still processing, failed, or was cancelled",
+          409,
+          { status: job.status },
+        ),
+      );
+    }
+
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
 
-    const stream = fs.createReadStream(job.filePath);
-    let cleaned = false;
-    const cleanupFile = () => {
-      if (cleaned) return;
-      cleaned = true;
-      const p = job.filePath;
-      job.filePath = null;
-      if (p) fs.unlink(p, () => {});
-    };
-    stream.on("error", (err) => {
-      cleanupFile();
-      if (!res.headersSent) next(err);
-    });
-    res.once("finish", cleanupFile);
-    req.once("close", () => {
-      if (!res.writableEnded) cleanupFile();
-    });
-    stream.pipe(res);
+    try {
+      if (job._zipFileId) {
+        const stream = await shareZipStore.openZipDownloadStream(job._zipFileId);
+        stream.on("error", (err) => {
+          if (!res.headersSent) next(err);
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      if (!job.filePath) {
+        throw new AppError(
+          "NOT_READY",
+          "Export file is not available yet — try again shortly",
+          409,
+          { status: job.status },
+        );
+      }
+
+      const stream = fs.createReadStream(job.filePath);
+      let cleaned = false;
+      const cleanupFile = () => {
+        if (cleaned || job._fromPersisted) return;
+        cleaned = true;
+        const p = job.filePath;
+        job.filePath = null;
+        if (p) fs.unlink(p, () => {});
+      };
+      stream.on("error", (err) => {
+        cleanupFile();
+        if (!res.headersSent) next(err);
+      });
+      res.once("finish", cleanupFile);
+      req.once("close", () => {
+        if (!res.writableEnded) cleanupFile();
+      });
+      stream.pipe(res);
+    } catch (err) {
+      return next(err);
+    }
   }
 
   /** Public full ZIP share — no auth; same export queue as dashboard */
@@ -538,12 +588,29 @@ function createApp() {
       if (!resolved) {
         throw new AppError("NOT_FOUND", "Share link not found or expired", 404);
       }
+      const jobPayload = resolved.job._fromPersisted
+        ? {
+            id: resolved.job.id,
+            status: resolved.job.status,
+            phase: resolved.job.phase,
+            percent: resolved.job.percent,
+            detail: resolved.job.detail,
+            error: resolved.job.error,
+            consignmentCount: resolved.job.consignmentCount,
+            createdAt: resolved.job.createdAt,
+            updatedAt: resolved.job.updatedAt,
+            downloadReady: resolved.job.downloadReady,
+            fileSize: resolved.job.fileSize
+          }
+        : fullExportJob.sanitizeJob(resolved.job);
+
       return ok(res, {
         consignmentCount: resolved.record.consignmentCount,
         generatedAt: resolved.record.generatedAt,
         snapshotDate: resolved.record.snapshotDate,
         snapshotDateLabel: resolved.record.snapshotDateLabel,
-        job: fullExportJob.sanitizeJob(resolved.job),
+        expiresAt: resolved.record.expiresAt,
+        job: jobPayload
       });
     } catch (err) {
       return next(err);
@@ -556,7 +623,7 @@ function createApp() {
       if (!resolved) {
         throw new AppError("NOT_FOUND", "Share link not found or expired", 404);
       }
-      streamFullExportZip(resolved.job, req, res, next);
+      await streamFullExportZip(resolved.job, req, res, next);
     } catch (err) {
       return next(err);
     }
@@ -616,6 +683,11 @@ async function start() {
     await mongo.connect();
     // eslint-disable-next-line no-console
     console.log("MongoDB connected");
+    const seeded = await ensureDefaultSuperAdmin();
+    if (seeded) {
+      // eslint-disable-next-line no-console
+      console.log(`Default superadmin ready: ${seeded.username} (${seeded.id})`);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn(

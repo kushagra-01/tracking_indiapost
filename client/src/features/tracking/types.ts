@@ -25,5 +25,7 @@ export type TrackResponse = {
   upstream_message: string;
   count: number;
   items: TrackingItem[];
+  fromCache?: number;
+  fetched?: number;
 };
 

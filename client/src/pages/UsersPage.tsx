@@ -10,8 +10,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   FormControlLabel,
+  InputLabel,
   IconButton,
+  MenuItem,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -67,6 +71,8 @@ function UsersPageContent() {
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
 
+  const [newRole, setNewRole] = useState<"user" | "admin">("user");
+
   const { register, handleSubmit, reset, formState } = useForm<{ username: string; password: string }>({
     defaultValues: { username: "", password: "" }
   });
@@ -112,11 +118,18 @@ function UsersPageContent() {
               {...register("password", { required: true, minLength: 6 })}
               sx={{ minWidth: { md: 220 } }}
             />
+            <FormControl size="small" sx={{ minWidth: { md: 140 } }}>
+              <InputLabel>Role</InputLabel>
+              <Select label="Role" value={newRole} onChange={(e) => setNewRole(e.target.value as "user" | "admin")}>
+                <MenuItem value="user">User</MenuItem>
+                <MenuItem value="admin">Admin</MenuItem>
+              </Select>
+            </FormControl>
             <Button
               variant="contained"
               disabled={formState.isSubmitting || createM.isPending}
               onClick={handleSubmit(async (v) => {
-                await createM.mutateAsync(v);
+                await createM.mutateAsync({ ...v, role: newRole });
                 reset();
               })}
             >
@@ -174,6 +187,7 @@ function UsersPageContent() {
                 <Box>
                   <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                     <Typography sx={{ fontWeight: 700 }}>{r.username}</Typography>
+                    <Chip size="small" label={r.role} variant="outlined" />
                     <Chip
                       size="small"
                       label={r.active ? "Active" : "Inactive"}

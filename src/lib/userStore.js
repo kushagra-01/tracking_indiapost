@@ -1,5 +1,5 @@
 /**
- * App users in MongoDB (superadmin remains env-based in login).
+ * App users in MongoDB (default superadmin is seeded on server start).
  */
 const { AppError } = require("./errors");
 const { hashPassword, verifyPassword, newId } = require("./auth");
@@ -139,6 +139,42 @@ async function getUserProfile(userId) {
   return toPublicUser(doc);
 }
 
+/** Ensure default superadmin exists in MongoDB (username/password from env or superadmin/superadmin). */
+async function ensureDefaultSuperAdmin() {
+  if (!process.env.MONGODB_URI) {
+    return null;
+  }
+
+  const username = String(
+    process.env.SUPERADMIN_USERNAME || "superadmin",
+  ).trim();
+  const password = String(
+    process.env.SUPERADMIN_PASSWORD || "superadmin",
+  ).trim();
+
+  const existing = await findUserByUsername(username);
+  const now = new Date().toISOString();
+
+  if (existing) {
+    const users = await col();
+    const patch = { role: "superadmin", active: true, updatedAt: now };
+    const passwordOk = await verifyPassword(password, existing.passwordHash);
+    if (!passwordOk) {
+      patch.passwordHash = await hashPassword(password);
+    }
+    if (
+      existing.role !== "superadmin" ||
+      existing.active === false ||
+      !passwordOk
+    ) {
+      await users.updateOne({ id: existing.id }, { $set: patch });
+    }
+    return toPublicUser(await findUserById(existing.id));
+  }
+
+  return createUser({ username, password, role: "superadmin" });
+}
+
 module.exports = {
   listUsers,
   createUser,
@@ -149,5 +185,6 @@ module.exports = {
   verifyUserCredentials,
   getUserProfile,
   findUserById,
+  ensureDefaultSuperAdmin,
   toPublicUser
 };

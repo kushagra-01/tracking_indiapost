@@ -17,6 +17,7 @@ export type ShareExportMeta = {
   snapshotDate: string;
   snapshotDateLabel: string;
   expiresAt?: number;
+  reused?: boolean;
 };
 
 export type ShareExportStatus = {
@@ -24,6 +25,7 @@ export type ShareExportStatus = {
   generatedAt: number;
   snapshotDate: string;
   snapshotDateLabel: string;
+  expiresAt?: number;
   job: FullExportJobStatus;
 };
 

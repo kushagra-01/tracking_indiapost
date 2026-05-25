@@ -19,6 +19,7 @@ import TrackChangesIcon from "@mui/icons-material/TrackChanges";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import PeopleIcon from "@mui/icons-material/People";
 import PersonIcon from "@mui/icons-material/Person";
+import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 import React from "react";
@@ -38,6 +39,9 @@ export function AppShell() {
     { to: "/profile", label: "My profile", icon: <PersonIcon /> },
     ...(user?.role === "superadmin"
       ? [{ to: "/users", label: "Users", icon: <PeopleIcon /> }]
+      : []),
+    ...(user?.role === "superadmin" || user?.role === "admin"
+      ? [{ to: "/settings", label: "Settings", icon: <SettingsIcon /> }]
       : [])
   ];
 
